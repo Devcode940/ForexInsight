@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -5,6 +6,7 @@ import { WatchlistSidebar } from '@/components/watchlist-sidebar';
 import { TradingChart, TradingChartHandle } from '@/components/trading-chart';
 import { AnalysisPanel } from '@/components/analysis-panel';
 import { IndicatorSettingsSidebar, IndicatorsState } from '@/components/indicator-settings-sidebar';
+import { UserNav } from '@/components/user-nav';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -37,10 +39,13 @@ import { detectCandlestickPatterns } from '@/ai/flows/candlestick-pattern-recogn
 import { fetchFinnhubCandles } from '@/app/actions/market-data';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
+import { saveUserPreferences, getUserPreferences } from '@/lib/firebase/store';
 
 const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', 'D', 'W', 'M'];
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [activePair, setActivePair] = useState('XAUUSD');
   const [activeTimeframe, setActiveTimeframe] = useState('1H');
   const [data, setData] = useState<Candlestick[]>([]);
@@ -69,10 +74,33 @@ export default function DashboardPage() {
   const [patterns, setPatterns] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  // Sync with Firestore when logged in
+  useEffect(() => {
+    if (user) {
+      getUserPreferences(user.uid).then(prefs => {
+        if (prefs) {
+          if (prefs.activePair) setActivePair(prefs.activePair);
+          if (prefs.activeTimeframe) setActiveTimeframe(prefs.activeTimeframe);
+          if (prefs.indicators) setIndicators(prefs.indicators);
+        }
+      });
+    }
+  }, [user]);
+
+  // Persist changes to Firestore
+  useEffect(() => {
+    if (user) {
+      saveUserPreferences(user.uid, {
+        activePair,
+        activeTimeframe,
+        indicators
+      });
+    }
+  }, [user, activePair, activeTimeframe, indicators]);
+
   const loadMarketData = async () => {
     const apiKey = localStorage.getItem('finnhub_api_key');
     if (!apiKey) {
-      // Fallback to mock data if no key
       const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
       setData(mockData);
       setIsRealData(false);
@@ -89,17 +117,11 @@ export default function DashboardPage() {
         setData(realData);
         setIsRealData(true);
       } else {
-        toast({
-          title: "Connection Failed",
-          description: "Could not fetch data. Check your API key and network.",
-          variant: "destructive"
-        });
         const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
         setData(mockData);
         setIsRealData(false);
       }
     } catch (error) {
-      console.error("Data loading failed:", error);
       const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
       setData(mockData);
     } finally {
@@ -107,7 +129,6 @@ export default function DashboardPage() {
     }
   };
 
-  // WebSocket Setup
   useEffect(() => {
     const apiKey = localStorage.getItem('finnhub_api_key');
     if (!apiKey || !isRealData) return;
@@ -126,15 +147,8 @@ export default function DashboardPage() {
       if (msg.type === 'trade') {
         const lastTrade = msg.data[msg.data.length - 1];
         const newPrice = lastTrade.p;
-        const timestamp = Math.floor(lastTrade.t / 1000);
-
         setData(prev => {
           if (prev.length === 0) return prev;
-          const lastCandle = prev[prev.length - 1];
-          
-          // Update the last candle or create a new one based on time
-          // Simple logic: update the current bar if in the same minute/resolution range
-          // For now, just update the close of the latest candle for real-time feel
           const updated = [...prev];
           const candle = updated[updated.length - 1];
           candle.close = newPrice;
@@ -161,7 +175,7 @@ export default function DashboardPage() {
     if (data.length < 50) {
       toast({
         title: "Insufficient Data",
-        description: "AI analysis requires at least 50 candles of data.",
+        description: "AI analysis requires at least 50 candles.",
         variant: "destructive"
       });
       return;
@@ -201,10 +215,9 @@ export default function DashboardPage() {
       setPatterns(patternResult.patterns);
 
     } catch (error) {
-      console.error("Analysis failed:", error);
       toast({
         title: "Analysis Failed",
-        description: "Could not complete AI analysis. Please try again later.",
+        description: "Could not complete AI analysis.",
         variant: "destructive"
       });
     } finally {
@@ -261,7 +274,6 @@ export default function DashboardPage() {
 
             <div className="flex items-center gap-1.5 ml-2">
               <Badge variant={isRealData ? "default" : "secondary"} className="text-[9px] h-4 px-1.5 font-bold uppercase tracking-wider">
-                {isRealData ? <Globe className="w-2.5 h-2.5 mr-1" /> : null}
                 {isRealData ? "Live" : "Demo"}
               </Badge>
               {isRealData && (
@@ -304,21 +316,6 @@ export default function DashboardPage() {
                   </TooltipTrigger>
                   <TooltipContent>RSI</TooltipContent>
                 </Tooltip>
-
-                <div className="w-px h-4 bg-border/50 mx-1" />
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="ghost" size="icon" 
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => chartRef.current?.resetView()}
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Reset Chart</TooltipContent>
-                </Tooltip>
               </div>
             </TooltipProvider>
 
@@ -330,7 +327,7 @@ export default function DashboardPage() {
               className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-8 text-[10px] uppercase tracking-wider px-4 shadow-lg shadow-primary/20"
             >
               <Zap className={cn("w-3.5 h-3.5 mr-1.5", isAnalyzing && "animate-pulse")} />
-              {isAnalyzing ? "Analysing" : "Get AI Analysis"}
+              {isAnalyzing ? "Analysing" : "AI Analysis"}
             </Button>
             
             <div className="h-4 w-px bg-border/50 mx-2" />
@@ -358,6 +355,10 @@ export default function DashboardPage() {
             >
               <MessageSquare className="w-4 h-4" />
             </Button>
+
+            <div className="h-4 w-px bg-border/50 mx-2" />
+            
+            <UserNav />
           </div>
         </header>
 
@@ -371,23 +372,6 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className="absolute top-4 left-4 z-10 pointer-events-none space-y-1">
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl font-bold font-headline tracking-tighter text-foreground/90">{activePair}</span>
-              <span className="text-[10px] font-mono font-bold text-muted-foreground bg-muted/20 px-1.5 py-0.5 rounded">
-                {isRealData ? "FINNHUB PRO" : "SIMULATED"}
-              </span>
-            </div>
-            {data.length > 0 && (
-               <div className="flex gap-3 text-[10px] font-mono text-muted-foreground">
-                <span>O: <span className="text-foreground font-bold">{data[data.length-1].open.toFixed(5)}</span></span>
-                <span>H: <span className="text-foreground font-bold">{data[data.length-1].high.toFixed(5)}</span></span>
-                <span>L: <span className="text-foreground font-bold">{data[data.length-1].low.toFixed(5)}</span></span>
-                <span>C: <span className={cn("font-bold", data[data.length-1].close >= data[data.length-1].open ? "text-green-400" : "text-red-400")}>{data[data.length-1].close.toFixed(5)}</span></span>
-              </div>
-            )}
-          </div>
-
           <div className="h-full w-full">
             <TradingChart ref={chartRef} data={data} indicators={indicators} />
           </div>
@@ -396,21 +380,17 @@ export default function DashboardPage() {
         <footer className="h-10 border-t bg-sidebar/80 backdrop-blur-md flex items-center justify-between px-4 text-[9px] font-bold text-muted-foreground uppercase tracking-wider overflow-hidden">
           <div className="flex items-center gap-4 flex-1">
             <div className="flex items-center gap-1.5 shrink-0">
-              <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.5)]", isRealData ? "bg-green-500" : "bg-blue-500")} />
+              <div className={cn("w-1.5 h-1.5 rounded-full", isRealData ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" : "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]")} />
               <span>{isRealData ? "Finnhub Live" : "Demo Engine"}</span>
             </div>
             <div className="h-3 w-px bg-border/50 shrink-0" />
             <div className="flex items-center gap-2 text-destructive/80 italic overflow-hidden">
               <AlertTriangle className="w-3 h-3 shrink-0" />
-              <span className="truncate">Disclaimer: All signals and patterns are rule-based approximations and do not constitute financial advice. Past performance is not indicative of future results.</span>
+              <span className="truncate">Disclaimer: AI signals are rule-based approximations and do not constitute financial advice.</span>
             </div>
           </div>
           <div className="flex items-center gap-4 font-mono ml-4 shrink-0">
             <span>UTC: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
-            <div className="flex items-center gap-2">
-              <Share2 className="w-3 h-3 cursor-pointer hover:text-foreground" />
-              <Maximize2 className="w-3 h-3 cursor-pointer hover:text-foreground" />
-            </div>
           </div>
         </footer>
       </main>
