@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   BrainCircuit, 
@@ -13,7 +12,9 @@ import {
   Info,
   ShieldAlert,
   ArrowRightCircle,
-  Stethoscope
+  Stethoscope,
+  Scale,
+  CheckCircle2
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -31,7 +32,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
       <div className="p-4 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BrainCircuit className="w-4 h-4 text-accent" />
-          <h2 className="text-sm font-bold tracking-tight uppercase">AI Intelligence</h2>
+          <h2 className="text-sm font-bold tracking-tight uppercase">AI Confluence</h2>
         </div>
         <Info className="w-4 h-4 text-muted-foreground hover:text-foreground cursor-pointer transition-colors" />
       </div>
@@ -42,54 +43,79 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
           <section>
             <div className="flex items-center gap-1.5 mb-3">
               <Zap className="w-3.5 h-3.5 text-primary" />
-              <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Market Analysis</h3>
+              <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Trade Probability</h3>
             </div>
             
             {isLoading ? (
               <div className="space-y-3 animate-pulse">
                 <div className="h-32 bg-muted/40 rounded-xl" />
-                <div className="h-20 bg-muted/40 rounded-xl" />
+                <div className="h-24 bg-muted/40 rounded-xl" />
               </div>
             ) : signal ? (
               <div className="space-y-4">
                 <div className={cn(
-                  "p-4 rounded-xl border border-border/50",
+                  "p-4 rounded-xl border border-border/50 shadow-sm",
                   signal.direction === 'Bullish' ? "bg-green-500/5 border-green-500/20" : 
                   signal.direction === 'Bearish' ? "bg-red-500/5 border-red-500/20" : "bg-muted/10"
                 )}>
-                  <div className="flex justify-between items-start mb-3">
+                  <div className="flex justify-between items-start mb-4">
                     <Badge className={cn(
                       "text-[10px] font-bold px-2 py-0.5",
                       signal.direction === 'Bullish' ? "bg-green-500 text-white" : 
                       signal.direction === 'Bearish' ? "bg-red-500 text-white" : "bg-muted text-muted-foreground"
                     )}>
-                      {signal.direction.toUpperCase()} BIAS
+                      {signal.direction.toUpperCase()}
                     </Badge>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-bold text-muted-foreground uppercase">Confidence</span>
-                      <span className="text-sm font-mono font-bold text-primary">{signal.confidence}/10</span>
+                    <div className="text-right">
+                      <span className="text-[9px] font-bold text-muted-foreground uppercase block">Confidence</span>
+                      <span className={cn(
+                        "text-sm font-mono font-bold",
+                        signal.confidence > 7 ? "text-primary" : "text-muted-foreground"
+                      )}>{signal.confidence}/10</span>
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     <div className="p-2 rounded bg-muted/20 border border-border/30">
-                      <span className="text-[8px] font-bold text-muted-foreground uppercase">Entry Zone</span>
-                      <p className="text-[10px] font-bold font-mono text-foreground">{signal.entryZone}</p>
+                      <span className="text-[8px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+                        <Target className="w-2.5 h-2.5" /> Entry
+                      </span>
+                      <p className="text-[10px] font-bold font-mono text-foreground mt-0.5">{signal.entryZone}</p>
+                    </div>
+                    <div className="p-2 rounded bg-muted/20 border border-border/30">
+                      <span className="text-[8px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+                        <Scale className="w-2.5 h-2.5" /> RR Ratio
+                      </span>
+                      <p className="text-[10px] font-bold font-mono text-primary mt-0.5">{signal.riskRewardRatio}</p>
                     </div>
                     <div className="p-2 rounded bg-muted/20 border border-border/30">
                       <span className="text-[8px] font-bold text-muted-foreground uppercase">Stop Loss</span>
-                      <p className="text-[10px] font-bold font-mono text-red-400">{signal.stopLoss}</p>
+                      <p className="text-[10px] font-bold font-mono text-red-400 mt-0.5">{signal.stopLoss}</p>
                     </div>
-                    <div className="p-2 rounded bg-muted/20 border border-border/30 col-span-2">
+                    <div className="p-2 rounded bg-muted/20 border border-border/30">
                       <span className="text-[8px] font-bold text-muted-foreground uppercase">Take Profit</span>
-                      <p className="text-[10px] font-bold font-mono text-green-400">{signal.takeProfit}</p>
+                      <p className="text-[10px] font-bold font-mono text-green-400 mt-0.5">{signal.takeProfit}</p>
                     </div>
                   </div>
+
+                  {signal.confluenceFactors && signal.confluenceFactors.length > 0 && (
+                    <div className="mb-4">
+                      <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest block mb-1.5">Alignment Factors</span>
+                      <div className="flex flex-wrap gap-1">
+                        {signal.confluenceFactors.map((f, i) => (
+                          <div key={i} className="flex items-center gap-1 bg-primary/10 text-primary text-[8px] font-bold px-1.5 py-0.5 rounded border border-primary/20">
+                            <CheckCircle2 className="w-2 h-2" />
+                            {f}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5 text-primary">
                       <ArrowRightCircle className="w-3 h-3" />
-                      <span className="text-[9px] font-bold uppercase tracking-wider">Reasoning</span>
+                      <span className="text-[9px] font-bold uppercase tracking-wider">Logic Analysis</span>
                     </div>
                     <p className="text-xs leading-relaxed text-foreground/80 font-medium italic">
                       "{signal.reasoning}"
@@ -100,68 +126,52 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
                 <div className="p-3 rounded-xl bg-destructive/5 border border-destructive/20">
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <ShieldAlert className="w-3 h-3 text-destructive" />
-                    <span className="text-[9px] font-bold text-destructive uppercase tracking-widest">Risk Warning</span>
+                    <span className="text-[9px] font-bold text-destructive uppercase tracking-widest">Risk Disclaimer</span>
                   </div>
-                  <p className="text-[9px] leading-tight text-muted-foreground">
+                  <p className="text-[9px] leading-tight text-muted-foreground italic">
                     {signal.riskWarning}
                   </p>
                 </div>
               </div>
             ) : (
               <div className="py-8 text-center border border-dashed rounded-xl bg-muted/5">
-                <p className="text-xs text-muted-foreground px-4">Click "Get AI Analysis" to generate a deep-dive report on current market conditions.</p>
+                <p className="text-xs text-muted-foreground px-4">Ready for deep analysis. Select an asset and timeframe to generate a high-confluence report.</p>
               </div>
             )}
           </section>
 
-          {/* Pattern Recognition */}
+          {/* Pattern Health */}
           <section>
             <div className="flex items-center gap-1.5 mb-3">
               <Stethoscope className="w-3.5 h-3.5 text-accent" />
-              <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Active Patterns</h3>
+              <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Pattern Detection</h3>
             </div>
             
             <div className="space-y-2">
               {patterns.length > 0 ? (
                 patterns.map((p, idx) => (
-                  <div key={idx} className="p-3 rounded-lg bg-muted/20 border border-border/30 hover:bg-muted/30 transition-colors">
+                  <div key={idx} className="p-3 rounded-lg bg-muted/20 border border-border/30 group hover:border-accent/50 transition-all cursor-default">
                     <div className="flex justify-between items-start mb-1.5">
                       <span className="text-xs font-bold">{p.patternName}</span>
-                      <div className="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(195,85,62,0.5)]" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shadow-[0_0_8px_rgba(195,85,62,0.5)]" />
                     </div>
-                    <p className="text-[10px] text-muted-foreground leading-normal">{p.explanation}</p>
+                    <p className="text-[10px] text-muted-foreground leading-normal group-hover:text-foreground transition-colors">{p.explanation}</p>
                   </div>
                 ))
               ) : (
-                <div className="py-6 text-center border border-dashed rounded-lg bg-muted/5">
+                <div className="py-6 text-center border border-dashed rounded-lg bg-muted/5 opacity-60">
                   <AlertCircle className="w-4 h-4 mx-auto mb-2 text-muted-foreground/30" />
-                  <p className="text-[10px] text-muted-foreground">No significant candle patterns detected</p>
+                  <p className="text-[10px] text-muted-foreground">Scanning for structural patterns...</p>
                 </div>
               )}
             </div>
           </section>
-
-          {/* Momentum Metric */}
-          {signal && (
-            <section className="bg-primary/5 p-4 rounded-xl border border-primary/10">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-[10px] font-bold text-primary uppercase tracking-widest">Analysis Weight</h3>
-                <span className="text-xs font-bold font-mono">{(signal.confidence * 0.95).toFixed(1)}</span>
-              </div>
-              <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-red-500 via-yellow-400 to-green-500" 
-                  style={{ width: `${signal.confidence * 10}%` }}
-                />
-              </div>
-            </section>
-          )}
         </div>
       </ScrollArea>
       
       <div className="p-4 bg-muted/5 border-t">
-        <button className="w-full py-2 bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors">
-          Download PDF Report
+        <button className="w-full py-2 bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all active:scale-95">
+          Generate Detailed PDF
         </button>
       </div>
     </div>

@@ -1,6 +1,6 @@
 'use server';
 /**
- * @fileOverview This file defines a Genkit flow for generating intelligent trade signals in Forex trading.
+ * @fileOverview This file defines an enhanced Genkit flow for generating intelligent trade signals with confluence analysis.
  *
  * - getExplainableTradeSignals - A function that calls the Genkit flow to generate trade signals and explanations.
  * - ExplainableTradeSignalsInput - The input type for the getExplainableTradeSignals function.
@@ -21,7 +21,7 @@ const CandleDataSchema = z.object({
 const ExplainableTradeSignalsInputSchema = z.object({
   currencyPair: z.string().describe('The currency pair being analyzed (e.g., "EURUSD").'),
   timeframe: z.string().describe('The current chart timeframe (e.g., "1m", "1H", "Daily").'),
-  candles: z.array(CandleDataSchema).describe('An array of 50-100 recent past candlestick data for context.'),
+  candles: z.array(CandleDataSchema).describe('An array of recent past candlestick data for context.'),
   indicators: z.object({
     sma: z.number().nullable().optional().describe('Simple Moving Average value.'),
     ema: z.number().nullable().optional().describe('Exponential Moving Average value.'),
@@ -41,8 +41,10 @@ const ExplainableTradeSignalsOutputSchema = z.object({
   entryZone: z.string().describe('Suggested Entry price zone.'),
   stopLoss: z.number().describe('Stop Loss level.'),
   takeProfit: z.number().describe('Take Profit level.'),
-  confidence: z.number().min(1).max(10).describe('Confidence level from 1 to 10.'),
-  reasoning: z.string().describe('Plain English reasoning for this analysis.'),
+  riskRewardRatio: z.string().describe('The calculated Risk-Reward Ratio (e.g., "1:2.5").'),
+  confidence: z.number().min(1).max(10).describe('Confidence level from 1 to 10 based on signal confluence.'),
+  confluenceFactors: z.array(z.string()).describe('List of specific technical factors that align for this signal (e.g., "RSI Oversold + Hammer").'),
+  reasoning: z.string().describe('Detailed reasoning for this analysis, explaining how indicators and patterns confirm each other.'),
   riskWarning: z.string().describe('A standard risk warning.'),
 });
 export type ExplainableTradeSignalsOutput = z.infer<typeof ExplainableTradeSignalsOutputSchema>;
@@ -55,23 +57,21 @@ const tradeSignalsPrompt = ai.definePrompt({
   name: 'explainableTradeSignalsPrompt',
   input: {schema: ExplainableTradeSignalsInputSchema},
   output: {schema: ExplainableTradeSignalsOutputSchema},
-  prompt: `You are an expert Forex trader. Analyze the provided OHLC data, detected patterns, and indicators for {{currencyPair}} on the {{timeframe}} timeframe.
+  prompt: `You are a Senior Forex Analyst. Your goal is to find **high-probability confluence** for {{currencyPair}} on the {{timeframe}} timeframe.
 
-Technical Data Provided:
-- Recent Candles ({{candles.length}} candles)
+Technical Environment:
+- Recent Candles: {{candles.length}} candles provided.
 - Indicators: 
   - RSI: {{indicators.rsi}}
   - SMA: {{indicators.sma}}
   - MACD: {{#if indicators.macd}}Line: {{indicators.macd.line}}, Signal: {{indicators.macd.signal}}{{else}}N/A{{/if}}
 - Patterns Detected: {{#each detectedPatterns}}{{this}}, {{/each}}
 
-Based on this, provide:
-1. Potential direction (Bullish/Bearish/Neutral)
-2. Suggested Entry price zone
-3. Stop Loss and Take Profit levels (numeric values based on current price action)
-4. Confidence (1-10)
-5. Plain English reasoning referencing the indicators and candles
-6. Risk warning: This is not financial advice
+Analysis Requirements:
+1. **Confluence Check**: Look for overlapping signals. For example, is there a Bullish Engulfing pattern at an EMA support line? Is RSI showing divergence?
+2. **Trend Context**: Determine if the trend is with or against the signal.
+3. **Risk Management**: Suggest a Stop Loss and Take Profit that provides a logical Risk-Reward Ratio (ideally 1:2 or better).
+4. **Confidence Rating**: If indicators and patterns both point the same way, confidence should be high (8-10). If they conflict, be neutral or low confidence.
 
 {{#each candles}}
 Candle: {{timestamp}}, O: {{open}}, H: {{high}}, L: {{low}}, C: {{close}}
