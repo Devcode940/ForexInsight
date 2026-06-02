@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { 
   createChart, 
   ColorType, 
@@ -19,16 +19,25 @@ interface TradingChartProps {
   indicators: IndicatorsState;
 }
 
-export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) => {
+export interface TradingChartHandle {
+  resetView: () => void;
+}
+
+export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({ data, indicators }, ref) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const smaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const emaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const macdSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const macdSignalSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const macdHistSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    resetView: () => {
+      if (chartRef.current) {
+        chartRef.current.timeScale().fitContent();
+      }
+    }
+  }));
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -39,8 +48,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
         textColor: '#D1D4DC',
       },
       grid: {
-        vertLines: { color: 'rgba(42, 46, 57, 0.1)' },
-        horzLines: { color: 'rgba(42, 46, 57, 0.1)' },
+        vertLines: { color: 'rgba(42, 46, 57, 0.05)' },
+        horzLines: { color: 'rgba(42, 46, 57, 0.05)' },
       },
       crosshair: {
         mode: 1,
@@ -50,6 +59,24 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
+        borderColor: '#2B2B43',
+        rightOffset: 12,
+        barSpacing: 6,
+      },
+      rightPriceScale: {
+        borderColor: '#2B2B43',
+        autoScale: true,
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        axisPressedMouseMove: true,
+        mouseWheel: true,
+        pinch: true,
       },
     });
 
@@ -65,7 +92,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
     candlestickSeriesRef.current = candlestickSeries;
 
     const handleResize = () => {
-      chart.applyOptions({ width: chartContainerRef.current?.clientWidth });
+      if (chartContainerRef.current) {
+        chart.applyOptions({ 
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight
+        });
+      }
     };
 
     window.addEventListener('resize', handleResize);
@@ -80,16 +112,19 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
     if (candlestickSeriesRef.current && data.length > 0) {
       candlestickSeriesRef.current.setData(data as CandlestickData<Time>[]);
       
-      // Pattern recognition markers
       const markers = detectBullishEngulfing(data) as SeriesMarker<Time>[];
       candlestickSeriesRef.current.setMarkers(markers);
+      
+      // Auto-fit on first load
+      if (chartRef.current && data.length > 0) {
+        chartRef.current.timeScale().fitContent();
+      }
     }
   }, [data]);
 
   useEffect(() => {
     if (!chartRef.current || !data || data.length === 0) return;
 
-    // SMA Logic
     if (indicators.sma.enabled) {
       if (!smaSeriesRef.current) {
         smaSeriesRef.current = chartRef.current.addLineSeries({
@@ -100,7 +135,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
       } else {
         smaSeriesRef.current.applyOptions({ title: `SMA ${indicators.sma.period}`, color: indicators.sma.color });
       }
-      
       const period = indicators.sma.period;
       const smaData = data.map((d, i) => {
         if (i < period) return null;
@@ -108,14 +142,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
         const avg = slice.reduce((sum, item) => sum + item.close, 0) / period;
         return { time: d.time as Time, value: avg };
       }).filter((item): item is { time: Time; value: number } => item !== null);
-      
       smaSeriesRef.current.setData(smaData);
     } else if (smaSeriesRef.current) {
       chartRef.current.removeSeries(smaSeriesRef.current);
       smaSeriesRef.current = null;
     }
 
-    // EMA Logic
     if (indicators.ema.enabled) {
       if (!emaSeriesRef.current) {
         emaSeriesRef.current = chartRef.current.addLineSeries({
@@ -127,26 +159,20 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
       } else {
         emaSeriesRef.current.applyOptions({ title: `EMA ${indicators.ema.period}`, color: indicators.ema.color });
       }
-
       const period = indicators.ema.period;
       const k = 2 / (period + 1);
       let emaValue = data[0].close;
       const emaData = data.map((d, i) => {
-        if (i === 0) {
-          emaValue = d.close;
-        } else {
-          emaValue = (d.close - emaValue) * k + emaValue;
-        }
+        if (i === 0) emaValue = d.close;
+        else emaValue = (d.close - emaValue) * k + emaValue;
         return { time: d.time as Time, value: emaValue };
       });
-      
       emaSeriesRef.current.setData(emaData);
     } else if (emaSeriesRef.current) {
       chartRef.current.removeSeries(emaSeriesRef.current);
       emaSeriesRef.current = null;
     }
 
-    // RSI Logic (on separate price scale)
     if (indicators.rsi.enabled) {
       if (!rsiSeriesRef.current) {
         rsiSeriesRef.current = chartRef.current.addLineSeries({
@@ -159,7 +185,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
           scaleMargins: { top: 0.8, bottom: 0.05 },
         });
       }
-      
       const { calculateRSI } = require('@/lib/forex-data-utils');
       const rsiData = calculateRSI(data, indicators.rsi.period);
       rsiSeriesRef.current.setData(rsiData);
@@ -170,4 +195,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
   }, [indicators, data]);
 
   return <div ref={chartContainerRef} className="h-full w-full" />;
-};
+});
+
+TradingChart.displayName = 'TradingChart';

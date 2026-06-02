@@ -1,9 +1,9 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { WatchlistSidebar } from '@/components/watchlist-sidebar';
-import { TradingChart } from '@/components/trading-chart';
+import { TradingChart, TradingChartHandle } from '@/components/trading-chart';
 import { AnalysisPanel } from '@/components/analysis-panel';
 import { IndicatorSettingsSidebar, IndicatorsState } from '@/components/indicator-settings-sidebar';
 import { Button } from '@/components/ui/button';
@@ -15,9 +15,8 @@ import {
   Maximize2,
   LineChart,
   Waves,
-  Layers,
   TrendingUp,
-  BarChart2
+  RefreshCw
 } from 'lucide-react';
 import { 
   Tooltip,
@@ -36,6 +35,7 @@ export default function DashboardPage() {
   const [activePair, setActivePair] = useState('EURUSD');
   const [activeTimeframe, setActiveTimeframe] = useState('1H');
   const [data, setData] = useState<Candlestick[]>([]);
+  const chartRef = useRef<TradingChartHandle>(null);
   
   // Indicator State
   const [indicators, setIndicators] = useState<IndicatorsState>({
@@ -109,6 +109,12 @@ export default function DashboardPage() {
     }));
   };
 
+  const resetChart = () => {
+    if (chartRef.current) {
+      chartRef.current.resetView();
+    }
+  };
+
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       <WatchlistSidebar activePair={activePair} onSelectPair={setActivePair} />
@@ -145,7 +151,7 @@ export default function DashboardPage() {
                       <LineChart className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>SMA (Period: {indicators.sma.period})</TooltipContent>
+                  <TooltipContent>SMA</TooltipContent>
                 </Tooltip>
                 
                 <Tooltip>
@@ -158,7 +164,7 @@ export default function DashboardPage() {
                       <Waves className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>EMA (Period: {indicators.ema.period})</TooltipContent>
+                  <TooltipContent>EMA</TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
@@ -171,7 +177,22 @@ export default function DashboardPage() {
                       <Activity className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>RSI (Period: {indicators.rsi.period})</TooltipContent>
+                  <TooltipContent>RSI</TooltipContent>
+                </Tooltip>
+
+                <div className="w-px h-4 bg-border/50 mx-1" />
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" size="icon" 
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={resetChart}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Reset View</TooltipContent>
                 </Tooltip>
               </div>
             </TooltipProvider>
@@ -205,7 +226,7 @@ export default function DashboardPage() {
           </div>
           
           <div className="h-full w-full">
-            <TradingChart data={data} indicators={indicators} />
+            <TradingChart ref={chartRef} data={data} indicators={indicators} />
           </div>
         </div>
 
@@ -216,7 +237,7 @@ export default function DashboardPage() {
               <span>Real-time Data Streaming</span>
             </div>
             <div className="h-4 w-px bg-border" />
-            <span>Server: Frankfurt AI-01</span>
+            <span>Interactive Chart Enabled (Scroll to Zoom, Drag to Pan)</span>
           </div>
           <div className="flex items-center gap-4">
             <span>Latency: 14ms</span>
