@@ -1,51 +1,63 @@
 'use server';
 
 /**
- * @fileOverview Server actions for fetching real Forex market data.
+ * @fileOverview Server actions for fetching real Forex market data via Finnhub.
  */
 
 import { Candlestick } from '@/lib/forex-data-utils';
 
-const ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query';
+const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
-export async function fetchAlphaVantageData(pair: string, interval: string = '5min'): Promise<Candlestick[] | null> {
-  const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
-  if (!apiKey) {
-    console.warn('ALPHA_VANTAGE_API_KEY not found in environment variables.');
-    return null;
-  }
-
-  // Alpha Vantage requires symbols like EURUSD to be split or handled specifically for some endpoints
-  // For FX_INTRADAY, from_symbol and to_symbol are required.
-  const fromSymbol = pair.substring(0, 3);
-  const toSymbol = pair.substring(3, 6);
+export async function fetchFinnhubCandles(
+  symbol: string, 
+  resolution: string, 
+  apiKey: string
+): Promise<Candlestick[] | null> {
+  if (!apiKey) return null;
 
   try {
-    const url = `${ALPHA_VANTAGE_BASE_URL}?function=FX_INTRADAY&from_symbol=${fromSymbol}&to_symbol=${toSymbol}&interval=${interval}&apikey=${apiKey}`;
-    const response = await fetch(url);
+    // Fetch last 500 candles roughly
+    const to = Math.floor(Date.now() / 1000);
+    // Rough subtraction based on resolution
+    let from;
+    switch(resolution) {
+      case '1': from = to - (60 * 500); break;
+      case '5': from = to - (300 * 500); break;
+      case '15': from = to - (900 * 500); break;
+      case '30': from = to - (1800 * 500); break;
+      case '60': from = to - (3600 * 500); break;
+      case 'D': from = to - (86400 * 500); break;
+      case 'W': from = to - (604800 * 500); break;
+      default: from = to - (86400 * 500);
+    }
+
+    const url = `${FINNHUB_BASE_URL}/forex/candle?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${to}&token=${apiKey}`;
+    const response = await fetch(url, { cache: 'no-store' });
     const data = await response.json();
 
-    const timeSeriesKey = `Time Series FX (${interval})`;
-    const timeSeries = data[timeSeriesKey];
-
-    if (!timeSeries) {
-      console.error('Alpha Vantage Error or Limit reached:', data);
+    if (data.s !== 'ok') {
+      console.error('Finnhub Error:', data);
       return null;
     }
 
-    const formattedData: Candlestick[] = Object.entries(timeSeries).map(([timestamp, values]: [string, any]) => {
-      return {
-        time: new Date(timestamp).getTime() / 1000,
-        open: parseFloat(values['1. open']),
-        high: parseFloat(values['2. high']),
-        low: parseFloat(values['3. low']),
-        close: parseFloat(values['4. close']),
-      };
-    }).sort((a, b) => (a.time as number) - (b.time as number));
+    // Finnhub returns arrays for t, o, h, l, c, v
+    const formattedData: Candlestick[] = data.t.map((timestamp: number, i: number) => ({
+      time: timestamp,
+      open: data.o[i],
+      high: data.h[i],
+      low: data.l[i],
+      close: data.c[i],
+      volume: data.v[i],
+    }));
 
     return formattedData;
   } catch (error) {
-    console.error('Failed to fetch Alpha Vantage data:', error);
+    console.error('Failed to fetch Finnhub data:', error);
     return null;
   }
+}
+
+// Keeping fallback just in case
+export async function fetchAlphaVantageData(pair: string, interval: string = '5min'): Promise<Candlestick[] | null> {
+  return null; // Deprecated in favor of Finnhub
 }

@@ -7,6 +7,42 @@ export interface Candlestick {
   volume?: number;
 }
 
+/**
+ * Maps dashboard symbols to Finnhub/OANDA format
+ */
+export function mapSymbolToFinnhub(pair: string): string {
+  if (pair.includes(':')) return pair; // Already mapped
+  
+  // Specific overrides
+  if (pair === 'XAUUSD') return 'OANDA:XAU_USD';
+  if (pair === 'XAGUSD') return 'OANDA:XAG_USD';
+  
+  // Standard FX mapping: EURUSD -> OANDA:EUR_USD
+  if (pair.length === 6) {
+    return `OANDA:${pair.substring(0, 3)}_${pair.substring(3, 6)}`;
+  }
+  
+  return pair;
+}
+
+/**
+ * Maps UI timeframes to Finnhub resolutions
+ */
+export function mapTimeframeToResolution(tf: string): string {
+  const map: Record<string, string> = {
+    '1m': '1',
+    '5m': '5',
+    '15m': '15',
+    '30m': '30',
+    '1H': '60',
+    '4H': '60', // Finnhub free doesn't always support 240, defaulting to 60
+    'D': 'D',
+    'W': 'W',
+    'M': 'M'
+  };
+  return map[tf] || '60';
+}
+
 export function generateMockForexData(basePrice: number, count: number = 200): Candlestick[] {
   const data: Candlestick[] = [];
   let currentPrice = basePrice;
@@ -98,7 +134,6 @@ export function calculateRSI(data: Candlestick[], period: number = 14) {
   return rsi;
 }
 
-// Advanced Pattern Detection Functions
 export function detectPatterns(data: Candlestick[]) {
   const markers = [];
   
@@ -139,7 +174,7 @@ export function detectPatterns(data: Candlestick[]) {
       });
     }
 
-    // 3. Doji (Close is very close to Open)
+    // 3. Doji
     if (bodySize <= totalSize * 0.1) {
       markers.push({
         time: curr.time,
@@ -150,7 +185,7 @@ export function detectPatterns(data: Candlestick[]) {
       });
     }
 
-    // 4. Hammer (Small body at top, long lower wick)
+    // 4. Hammer
     if (lowerWick >= bodySize * 2 && upperWick <= bodySize * 0.5) {
       markers.push({
         time: curr.time,
@@ -161,7 +196,7 @@ export function detectPatterns(data: Candlestick[]) {
       });
     }
 
-    // 5. Shooting Star (Small body at bottom, long upper wick)
+    // 5. Shooting Star
     if (upperWick >= bodySize * 2 && lowerWick <= bodySize * 0.5) {
       markers.push({
         time: curr.time,

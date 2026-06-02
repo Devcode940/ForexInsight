@@ -21,7 +21,9 @@ import {
   AlertTriangle,
   PanelLeft,
   PanelRight,
-  MessageSquare
+  MessageSquare,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { 
   Tooltip,
@@ -29,22 +31,24 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { generateMockForexData, Candlestick, detectPatterns } from '@/lib/forex-data-utils';
+import { generateMockForexData, Candlestick, detectPatterns, mapSymbolToFinnhub, mapTimeframeToResolution } from '@/lib/forex-data-utils';
 import { getExplainableTradeSignals, ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 import { detectCandlestickPatterns } from '@/ai/flows/candlestick-pattern-recognition';
-import { fetchAlphaVantageData } from '@/app/actions/market-data';
+import { fetchFinnhubCandles } from '@/app/actions/market-data';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
-const TIMEFRAMES = ['1m', '5m', '15m', '1H', '4H', 'D'];
+const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', 'D', 'W', 'M'];
 
 export default function DashboardPage() {
-  const [activePair, setActivePair] = useState('EURUSD');
+  const [activePair, setActivePair] = useState('XAUUSD');
   const [activeTimeframe, setActiveTimeframe] = useState('1H');
   const [data, setData] = useState<Candlestick[]>([]);
   const [isRealData, setIsRealData] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
   const chartRef = useRef<TradingChartHandle>(null);
+  const socketRef = useRef<WebSocket | null>(null);
   const { toast } = useToast();
   
   // Sidebar Visibility States
@@ -66,23 +70,30 @@ export default function DashboardPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const loadMarketData = async () => {
+    const apiKey = localStorage.getItem('finnhub_api_key');
+    if (!apiKey) {
+      // Fallback to mock data if no key
+      const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
+      setData(mockData);
+      setIsRealData(false);
+      return;
+    }
+
     setIsLoadingData(true);
     try {
-      const intervalMap: Record<string, string> = {
-        '1m': '1min',
-        '5m': '5min',
-        '15m': '15min',
-        '1H': '60min',
-        '4H': '60min', 
-        'D': 'daily'
-      };
-
-      const realData = await fetchAlphaVantageData(activePair, intervalMap[activeTimeframe] || '5min');
+      const symbol = mapSymbolToFinnhub(activePair);
+      const res = mapTimeframeToResolution(activeTimeframe);
+      const realData = await fetchFinnhubCandles(symbol, res, apiKey);
       
       if (realData && realData.length > 0) {
         setData(realData);
         setIsRealData(true);
       } else {
+        toast({
+          title: "Connection Failed",
+          description: "Could not fetch data. Check your API key and network.",
+          variant: "destructive"
+        });
         const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
         setData(mockData);
         setIsRealData(false);
@@ -95,6 +106,52 @@ export default function DashboardPage() {
       setIsLoadingData(false);
     }
   };
+
+  // WebSocket Setup
+  useEffect(() => {
+    const apiKey = localStorage.getItem('finnhub_api_key');
+    if (!apiKey || !isRealData) return;
+
+    const symbol = mapSymbolToFinnhub(activePair);
+    const socket = new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
+    socketRef.current = socket;
+
+    socket.onopen = () => {
+      setSocketConnected(true);
+      socket.send(JSON.stringify({ type: 'subscribe', symbol }));
+    };
+
+    socket.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'trade') {
+        const lastTrade = msg.data[msg.data.length - 1];
+        const newPrice = lastTrade.p;
+        const timestamp = Math.floor(lastTrade.t / 1000);
+
+        setData(prev => {
+          if (prev.length === 0) return prev;
+          const lastCandle = prev[prev.length - 1];
+          
+          // Update the last candle or create a new one based on time
+          // Simple logic: update the current bar if in the same minute/resolution range
+          // For now, just update the close of the latest candle for real-time feel
+          const updated = [...prev];
+          const candle = updated[updated.length - 1];
+          candle.close = newPrice;
+          candle.high = Math.max(candle.high, newPrice);
+          candle.low = Math.min(candle.low, newPrice);
+          return updated;
+        });
+      }
+    };
+
+    socket.onclose = () => setSocketConnected(false);
+    socket.onerror = () => setSocketConnected(false);
+
+    return () => {
+      if (socketRef.current) socketRef.current.close();
+    };
+  }, [activePair, isRealData]);
 
   useEffect(() => {
     loadMarketData();
@@ -190,11 +247,11 @@ export default function DashboardPage() {
             <div className="h-4 w-px bg-border/50" />
 
             <Tabs value={activeTimeframe} onValueChange={setActiveTimeframe} className="h-8">
-              <TabsList className="bg-transparent h-8 p-0 gap-1">
+              <TabsList className="bg-transparent h-8 p-0 gap-1 overflow-x-auto max-w-[300px] flex-nowrap scrollbar-none">
                 {TIMEFRAMES.map(tf => (
                   <TabsTrigger 
                     key={tf} value={tf} 
-                    className="h-7 px-2.5 text-[10px] font-bold border-none data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded"
+                    className="h-7 px-2.5 text-[10px] font-bold border-none data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded shrink-0"
                   >
                     {tf}
                   </TabsTrigger>
@@ -205,8 +262,17 @@ export default function DashboardPage() {
             <div className="flex items-center gap-1.5 ml-2">
               <Badge variant={isRealData ? "default" : "secondary"} className="text-[9px] h-4 px-1.5 font-bold uppercase tracking-wider">
                 {isRealData ? <Globe className="w-2.5 h-2.5 mr-1" /> : null}
-                {isRealData ? "Live" : "Mock"}
+                {isRealData ? "Live" : "Demo"}
               </Badge>
+              {isRealData && (
+                <div className={cn(
+                  "flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[8px] font-bold uppercase",
+                  socketConnected ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-red-500/10 border-red-500/20 text-red-500"
+                )}>
+                  {socketConnected ? <Wifi className="w-2 h-2" /> : <WifiOff className="w-2 h-2" />}
+                  {socketConnected ? "Connected" : "Disconnected"}
+                </div>
+              )}
             </div>
           </div>
 
@@ -309,7 +375,7 @@ export default function DashboardPage() {
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold font-headline tracking-tighter text-foreground/90">{activePair}</span>
               <span className="text-[10px] font-mono font-bold text-muted-foreground bg-muted/20 px-1.5 py-0.5 rounded">
-                {isRealData ? "ALPHA VANTAGE" : "SIMULATED"}
+                {isRealData ? "FINNHUB PRO" : "SIMULATED"}
               </span>
             </div>
             {data.length > 0 && (
@@ -331,7 +397,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4 flex-1">
             <div className="flex items-center gap-1.5 shrink-0">
               <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.5)]", isRealData ? "bg-green-500" : "bg-blue-500")} />
-              <span>{isRealData ? "Live Data" : "Mock Stream"}</span>
+              <span>{isRealData ? "Finnhub Live" : "Demo Engine"}</span>
             </div>
             <div className="h-3 w-px bg-border/50 shrink-0" />
             <div className="flex items-center gap-2 text-destructive/80 italic overflow-hidden">
