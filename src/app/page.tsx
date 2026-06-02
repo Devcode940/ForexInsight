@@ -1,21 +1,21 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { WatchlistSidebar } from '@/components/watchlist-sidebar';
 import { TradingChart } from '@/components/trading-chart';
 import { AnalysisPanel } from '@/components/analysis-panel';
+import { IndicatorSettingsSidebar, IndicatorsState } from '@/components/indicator-settings-sidebar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Settings2, 
-  BarChart2, 
-  Layers, 
   Activity, 
   Zap, 
   Maximize2,
   LineChart,
   Waves,
+  Layers,
   TrendingUp
 } from 'lucide-react';
 import { 
@@ -35,12 +35,15 @@ export default function DashboardPage() {
   const [activePair, setActivePair] = useState('EURUSD');
   const [activeTimeframe, setActiveTimeframe] = useState('1H');
   const [data, setData] = useState<Candlestick[]>([]);
-  const [indicators, setIndicators] = useState({
-    sma: true,
-    ema: false,
-    bb: false,
-    rsi: true
+  
+  // Indicator State
+  const [indicators, setIndicators] = useState<IndicatorsState>({
+    sma: { enabled: true, period: 20, color: '#3A86FF' },
+    ema: { enabled: false, period: 50, color: '#FFBE0B' },
+    bb: { enabled: false, period: 20, color: '#00F5D4' },
+    rsi: { enabled: true, period: 14, color: '#9D4EDD' }
   });
+  const [showIndicatorSettings, setShowIndicatorSettings] = useState(false);
   
   // AI States
   const [signal, setSignal] = useState<ExplainableTradeSignalsOutput | undefined>();
@@ -74,7 +77,7 @@ export default function DashboardPage() {
         })),
         indicators: {
           rsi: 62.5, // Mock current RSI
-          sma: [{ period: 20, value: currentCandle.close * 0.999 }]
+          sma: [{ period: indicators.sma.period, value: currentCandle.close * 0.999 }]
         }
       });
       setSignal(result);
@@ -99,7 +102,14 @@ export default function DashboardPage() {
   useEffect(() => {
     const timeout = setTimeout(runAnalysis, 1000);
     return () => clearTimeout(timeout);
-  }, [data]);
+  }, [data, indicators.sma.period, indicators.ema.period, indicators.bb.period]);
+
+  const toggleIndicator = (key: keyof IndicatorsState) => {
+    setIndicators(prev => ({
+      ...prev,
+      [key]: { ...prev[key], enabled: !prev[key].enabled }
+    }));
+  };
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
@@ -134,34 +144,34 @@ export default function DashboardPage() {
                   <TooltipTrigger asChild>
                     <Button 
                       variant="ghost" size="icon" 
-                      className={cn("h-8 w-8", indicators.sma && "text-primary bg-primary/10")}
-                      onClick={() => setIndicators(prev => ({ ...prev, sma: !prev.sma }))}
+                      className={cn("h-8 w-8", indicators.sma.enabled && "text-primary bg-primary/10")}
+                      onClick={() => toggleIndicator('sma')}
                     >
                       <LineChart className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Toggle SMA</TooltipContent>
+                  <TooltipContent>SMA (Period: {indicators.sma.period})</TooltipContent>
                 </Tooltip>
                 
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button 
                       variant="ghost" size="icon" 
-                      className={cn("h-8 w-8", indicators.ema && "text-yellow-400 bg-yellow-400/10")}
-                      onClick={() => setIndicators(prev => ({ ...prev, ema: !prev.ema }))}
+                      className={cn("h-8 w-8", indicators.ema.enabled && "text-yellow-400 bg-yellow-400/10")}
+                      onClick={() => toggleIndicator('ema')}
                     >
                       <Waves className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Toggle EMA</TooltipContent>
+                  <TooltipContent>EMA (Period: {indicators.ema.period})</TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button 
                       variant="ghost" size="icon" 
-                      className={cn("h-8 w-8", indicators.bb && "text-accent bg-accent/10")}
-                      onClick={() => setIndicators(prev => ({ ...prev, bb: !prev.bb }))}
+                      className={cn("h-8 w-8", indicators.bb.enabled && "text-accent bg-accent/10")}
+                      onClick={() => toggleIndicator('bb')}
                     >
                       <Layers className="h-4 w-4" />
                     </Button>
@@ -180,7 +190,12 @@ export default function DashboardPage() {
               {isAnalyzing ? "Analyzing..." : "Analyze Now"}
             </Button>
             
-            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={cn("h-9 w-9 text-muted-foreground", showIndicatorSettings && "text-primary bg-primary/10")}
+              onClick={() => setShowIndicatorSettings(!showIndicatorSettings)}
+            >
               <Settings2 className="w-5 h-5" />
             </Button>
           </div>
@@ -192,12 +207,6 @@ export default function DashboardPage() {
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold font-headline">{activePair}</span>
               <span className="text-sm font-mono text-muted-foreground">{activeTimeframe} · FX Market</span>
-            </div>
-            <div className="flex gap-4 mt-1">
-              <div className="text-[10px] font-mono"><span className="text-muted-foreground mr-1">O:</span><span className="text-foreground">1.0842</span></div>
-              <div className="text-[10px] font-mono"><span className="text-muted-foreground mr-1">H:</span><span className="text-green-400">1.0865</span></div>
-              <div className="text-[10px] font-mono"><span className="text-muted-foreground mr-1">L:</span><span className="text-red-400">1.0831</span></div>
-              <div className="text-[10px] font-mono"><span className="text-muted-foreground mr-1">C:</span><span className="text-foreground font-bold">1.0844</span></div>
             </div>
           </div>
           
@@ -227,13 +236,21 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-4">
             <span>Latency: 14ms</span>
-            <span>UTC-5: 14:23:41</span>
+            <span>UTC-5: {new Date().toLocaleTimeString()}</span>
           </div>
         </footer>
       </main>
 
-      {/* Right Analysis Panel */}
-      <AnalysisPanel signal={signal} patterns={patterns} isLoading={isAnalyzing} />
+      {/* Conditional Sidebar Panel */}
+      {showIndicatorSettings ? (
+        <IndicatorSettingsSidebar 
+          indicators={indicators} 
+          setIndicators={setIndicators} 
+          onClose={() => setShowIndicatorSettings(false)} 
+        />
+      ) : (
+        <AnalysisPanel signal={signal} patterns={patterns} isLoading={isAnalyzing} />
+      )}
     </div>
   );
 }

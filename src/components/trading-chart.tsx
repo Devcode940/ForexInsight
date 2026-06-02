@@ -1,19 +1,14 @@
 
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts';
 import { Candlestick } from '@/lib/forex-data-utils';
-import { useTheme } from 'next-themes';
+import { IndicatorsState } from '@/components/indicator-settings-sidebar';
 
 interface TradingChartProps {
   data: Candlestick[];
-  indicators: {
-    sma: boolean;
-    ema: boolean;
-    bb: boolean;
-    rsi: boolean;
-  };
+  indicators: IndicatorsState;
   patterns?: any[];
 }
 
@@ -29,12 +24,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: '#111519' },
+        background: { type: ColorType.Solid, color: '#0B0E11' },
         textColor: '#D1D4DC',
       },
       grid: {
-        vertLines: { color: 'rgba(42, 46, 57, 0.3)' },
-        horzLines: { color: 'rgba(42, 46, 57, 0.3)' },
+        vertLines: { color: 'rgba(42, 46, 57, 0.1)' },
+        horzLines: { color: 'rgba(42, 46, 57, 0.1)' },
       },
       crosshair: {
         mode: 1,
@@ -77,42 +72,59 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
   }, [data]);
 
   useEffect(() => {
-    if (!chartRef.current || !data) return;
+    if (!chartRef.current || !data || data.length === 0) return;
 
-    // SMA
-    if (indicators.sma) {
+    // SMA Logic
+    if (indicators.sma.enabled) {
       if (!smaSeriesRef.current) {
         smaSeriesRef.current = chartRef.current.addLineSeries({
-          color: '#3A86FF',
+          color: indicators.sma.color,
           lineWidth: 2,
-          title: 'SMA 20',
+          title: `SMA ${indicators.sma.period}`,
         });
+      } else {
+        smaSeriesRef.current.applyOptions({ title: `SMA ${indicators.sma.period}`, color: indicators.sma.color });
       }
+      
+      const period = indicators.sma.period;
       const smaData = data.map((d, i) => {
-        const period = 20;
         if (i < period) return null;
-        const slice = data.slice(i - period, i);
+        const slice = data.slice(i - period + 1, i + 1);
         const avg = slice.reduce((sum, item) => sum + item.close, 0) / period;
         return { time: d.time as Time, value: avg };
-      }).filter(Boolean) as any[];
+      }).filter((item): item is { time: Time; value: number } => item !== null);
+      
       smaSeriesRef.current.setData(smaData);
     } else if (smaSeriesRef.current) {
       chartRef.current.removeSeries(smaSeriesRef.current);
       smaSeriesRef.current = null;
     }
 
-    // EMA
-    if (indicators.ema) {
+    // EMA Logic
+    if (indicators.ema.enabled) {
       if (!emaSeriesRef.current) {
         emaSeriesRef.current = chartRef.current.addLineSeries({
-          color: '#FFBE0B',
+          color: indicators.ema.color,
           lineWidth: 2,
           lineStyle: 2,
-          title: 'EMA 50',
+          title: `EMA ${indicators.ema.period}`,
         });
+      } else {
+        emaSeriesRef.current.applyOptions({ title: `EMA ${indicators.ema.period}`, color: indicators.ema.color });
       }
-      // Simple EMA calculation for mock
-      const emaData = data.map((d) => ({ time: d.time as Time, value: d.close * 0.998 }));
+
+      const period = indicators.ema.period;
+      const k = 2 / (period + 1);
+      let emaValue = data[0].close;
+      const emaData = data.map((d, i) => {
+        if (i === 0) {
+          emaValue = d.close;
+        } else {
+          emaValue = (d.close - emaValue) * k + emaValue;
+        }
+        return { time: d.time as Time, value: emaValue };
+      });
+      
       emaSeriesRef.current.setData(emaData);
     } else if (emaSeriesRef.current) {
       chartRef.current.removeSeries(emaSeriesRef.current);
