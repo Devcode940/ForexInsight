@@ -6,10 +6,27 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
-import { Settings2, LineChart, Waves, Layers, Activity, X, Key, Globe, ShieldCheck, BarChart3, Binary, RotateCcw } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { 
+  Settings2, 
+  LineChart, 
+  Waves, 
+  Activity, 
+  X, 
+  Key, 
+  Globe, 
+  ShieldCheck, 
+  BarChart3, 
+  Binary, 
+  RotateCcw,
+  BrainCircuit,
+  Sparkles
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { useAuth } from '@/hooks/use-auth';
+import { saveUserPreferences, getUserPreferences } from '@/lib/firebase/store';
 
 export interface IndicatorConfig {
   enabled: boolean;
@@ -37,16 +54,32 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
   setIndicators,
   onClose
 }) => {
+  const { user } = useAuth();
   const [apiKey, setApiKey] = useState('');
+  const [customAiInstructions, setCustomAiInstructions] = useState('');
 
   useEffect(() => {
     const saved = localStorage.getItem('finnhub_api_key');
     if (saved) setApiKey(saved);
-  }, []);
+
+    if (user) {
+      getUserPreferences(user.uid).then(prefs => {
+        if (prefs?.customAiInstructions) {
+          setCustomAiInstructions(prefs.customAiInstructions);
+        }
+      });
+    }
+  }, [user]);
 
   const saveKey = () => {
     localStorage.setItem('finnhub_api_key', apiKey);
     window.location.reload();
+  };
+
+  const saveAiConfig = async () => {
+    if (user) {
+      await saveUserPreferences(user.uid, { customAiInstructions });
+    }
   };
 
   const updateIndicator = (key: keyof IndicatorsState, updates: any) => {
@@ -82,7 +115,7 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-8">
-          {/* Connection Section */}
+          {/* Connectivity Section */}
           <section className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <Globe className="w-4 h-4 text-primary" />
@@ -106,31 +139,37 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
                   <Button size="sm" onClick={saveKey} className="h-9 font-bold uppercase text-[10px]">Save</Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-[9px] text-muted-foreground leading-tight italic">
-                <ShieldCheck className="w-3 h-3 text-green-500" />
-                <span>Token is encrypted locally.</span>
-              </div>
             </div>
           </section>
 
           <Separator />
 
-          {/* Patterns Section */}
+          {/* AI Intelligence Section */}
           <section className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
-              <Binary className="w-4 h-4 text-accent" />
-              <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Pattern Intelligence</h3>
+              <BrainCircuit className="w-4 h-4 text-accent" />
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">AI Configuration</h3>
             </div>
             
-            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/20 border border-border/30">
-              <div className="space-y-0.5">
-                <Label className="text-xs font-bold">Show Labels</Label>
-                <p className="text-[9px] text-muted-foreground leading-none">Display pattern names on chart</p>
+            <div className="p-4 rounded-xl bg-accent/5 border border-accent/10 space-y-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold uppercase tracking-tighter">Custom Instructions</Label>
+                <Textarea 
+                  value={customAiInstructions}
+                  onChange={(e) => setCustomAiInstructions(e.target.value)}
+                  placeholder="e.g. Focus on 5m scalping strategies using RSI and Price Action..." 
+                  className="min-h-[100px] text-xs bg-background resize-none"
+                />
+                <Button 
+                  size="sm" 
+                  onClick={saveAiConfig} 
+                  variant="outline"
+                  className="w-full h-8 font-bold uppercase text-[9px] gap-2"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Save AI Config
+                </Button>
               </div>
-              <Switch 
-                checked={indicators.showPatternLabels} 
-                onCheckedChange={(val) => updateIndicator('showPatternLabels', val)} 
-              />
             </div>
           </section>
 
@@ -160,7 +199,7 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <LineChart className="w-4 h-4 text-blue-400" />
-                  <Label className="text-xs font-bold">SMA (Simple Moving Avg)</Label>
+                  <Label className="text-xs font-bold">SMA</Label>
                 </div>
                 <Switch 
                   checked={indicators.sma.enabled} 
@@ -175,9 +214,7 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
                   </div>
                   <Slider 
                     value={[indicators.sma.period]} 
-                    min={5} 
-                    max={200} 
-                    step={1} 
+                    min={5} max={200} step={1} 
                     onValueChange={([val]) => updateIndicator('sma', { period: val })} 
                     className="py-2"
                   />
@@ -190,7 +227,7 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Waves className="w-4 h-4 text-yellow-400" />
-                  <Label className="text-xs font-bold">EMA (Exponential Avg)</Label>
+                  <Label className="text-xs font-bold">EMA</Label>
                 </div>
                 <Switch 
                   checked={indicators.ema.enabled} 
@@ -205,9 +242,7 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
                   </div>
                   <Slider 
                     value={[indicators.ema.period]} 
-                    min={5} 
-                    max={200} 
-                    step={1} 
+                    min={5} max={200} step={1} 
                     onValueChange={([val]) => updateIndicator('ema', { period: val })} 
                     className="py-2"
                   />
@@ -220,7 +255,7 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4 text-purple-400" />
-                  <Label className="text-xs font-bold">RSI (Relative Strength)</Label>
+                  <Label className="text-xs font-bold">RSI</Label>
                 </div>
                 <Switch 
                   checked={indicators.rsi.enabled} 
@@ -235,9 +270,7 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
                   </div>
                   <Slider 
                     value={[indicators.rsi.period]} 
-                    min={2} 
-                    max={30} 
-                    step={1} 
+                    min={2} max={30} step={1} 
                     onValueChange={([val]) => updateIndicator('rsi', { period: val })} 
                     className="py-2"
                   />

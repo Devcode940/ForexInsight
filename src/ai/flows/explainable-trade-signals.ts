@@ -33,6 +33,7 @@ const ExplainableTradeSignalsInputSchema = z.object({
     }).optional().describe('MACD values.'),
   }).optional().describe('Current values of various technical indicators.'),
   detectedPatterns: z.array(z.string()).optional().describe('List of names of patterns detected in the current view.'),
+  customInstructions: z.string().optional().describe('User-provided custom instructions to bias the AI analysis.'),
 });
 export type ExplainableTradeSignalsInput = z.infer<typeof ExplainableTradeSignalsInputSchema>;
 
@@ -66,6 +67,11 @@ Technical Environment:
   - SMA: {{indicators.sma}}
   - MACD: {{#if indicators.macd}}Line: {{indicators.macd.line}}, Signal: {{indicators.macd.signal}}{{else}}N/A{{/if}}
 - Patterns Detected: {{#each detectedPatterns}}{{this}}, {{/each}}
+
+{{#if customInstructions}}
+USER CUSTOM CONFIGURATION (PRIORITIZE THIS):
+{{{customInstructions}}}
+{{/if}}
 
 Analysis Requirements:
 1. **Confluence Check**: Look for overlapping signals. For example, is there a Bullish Engulfing pattern at an EMA support line? Is RSI showing divergence?

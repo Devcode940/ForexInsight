@@ -39,7 +39,7 @@ import { fetchFinnhubCandles } from '@/app/actions/market-data';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { saveUserPreferences, getUserPreferences } from '@/lib/firebase/store';
+import { saveUserPreferences, getUserPreferences, saveTradeSignal } from '@/lib/firebase/store';
 
 const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', 'D', 'W', 'M'];
 
@@ -47,6 +47,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [activePair, setActivePair] = useState('XAUUSD');
   const [activeTimeframe, setActiveTimeframe] = useState('1H');
+  const [customAiInstructions, setCustomAiInstructions] = useState('');
   const [data, setData] = useState<Candlestick[]>([]);
   const [isRealData, setIsRealData] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -83,6 +84,7 @@ export default function DashboardPage() {
           if (prefs.activePair) setActivePair(prefs.activePair);
           if (prefs.activeTimeframe) setActiveTimeframe(prefs.activeTimeframe);
           if (prefs.indicators) setIndicators(prefs.indicators);
+          if (prefs.customAiInstructions) setCustomAiInstructions(prefs.customAiInstructions);
         }
       });
     }
@@ -202,9 +204,15 @@ export default function DashboardPage() {
           rsi: 62.5, 
           sma: recentCandles[recentCandles.length - 1].close * 0.998,
         },
-        detectedPatterns: patternNames
+        detectedPatterns: patternNames,
+        customInstructions: customAiInstructions
       });
       setSignal(result);
+
+      // Save to history if logged in
+      if (user) {
+        await saveTradeSignal(user.uid, result, activePair, activeTimeframe);
+      }
 
       const patternResult = await detectCandlestickPatterns({
         candles: data.slice(-20).map(c => ({
