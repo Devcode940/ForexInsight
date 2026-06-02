@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -12,11 +11,13 @@ import {
   Settings2, 
   Activity, 
   Zap, 
-  Maximize2,
   LineChart,
   Waves,
   TrendingUp,
-  RefreshCw
+  RefreshCw,
+  Maximize2,
+  Share2,
+  ChevronDown
 } from 'lucide-react';
 import { 
   Tooltip,
@@ -29,7 +30,7 @@ import { getExplainableTradeSignals, ExplainableTradeSignalsOutput } from '@/ai/
 import { detectCandlestickPatterns } from '@/ai/flows/candlestick-pattern-recognition';
 import { cn } from '@/lib/utils';
 
-const TIMEFRAMES = ['1m', '5m', '15m', '1H', '4H', 'Daily'];
+const TIMEFRAMES = ['1m', '5m', '15m', '1H', '4H', 'D'];
 
 export default function DashboardPage() {
   const [activePair, setActivePair] = useState('EURUSD');
@@ -109,38 +110,38 @@ export default function DashboardPage() {
     }));
   };
 
-  const resetChart = () => {
-    if (chartRef.current) {
-      chartRef.current.resetView();
-    }
-  };
-
   return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden">
+    <div className="flex h-screen bg-background text-foreground overflow-hidden selection:bg-primary/30">
       <WatchlistSidebar activePair={activePair} onSelectPair={setActivePair} />
 
-      <main className="flex-1 flex flex-col min-w-0 bg-background">
-        <header className="h-16 border-b flex items-center justify-between px-6 bg-card/30">
-          <div className="flex items-center gap-6">
-            <h1 className="text-xl font-headline font-bold flex items-center gap-2">
-              <TrendingUp className="w-6 h-6 text-primary" />
-              ForexInsight <span className="text-accent">AI</span>
-            </h1>
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* Main Toolbar */}
+        <header className="h-12 border-b flex items-center justify-between px-4 bg-sidebar/50 backdrop-blur-md z-20">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 group cursor-pointer hover:bg-muted/50 px-2 py-1 rounded transition-colors">
+              <span className="text-sm font-bold tracking-tight">{activePair}</span>
+              <ChevronDown className="w-3 h-3 text-muted-foreground group-hover:text-foreground" />
+            </div>
             
-            <div className="h-8 w-px bg-border" />
+            <div className="h-4 w-px bg-border/50" />
 
-            <Tabs value={activeTimeframe} onValueChange={setActiveTimeframe}>
-              <TabsList className="bg-muted/50 h-9">
+            <Tabs value={activeTimeframe} onValueChange={setActiveTimeframe} className="h-8">
+              <TabsList className="bg-transparent h-8 p-0 gap-1">
                 {TIMEFRAMES.map(tf => (
-                  <TabsTrigger key={tf} value={tf} className="px-3 text-xs font-bold">{tf}</TabsTrigger>
+                  <TabsTrigger 
+                    key={tf} value={tf} 
+                    className="h-7 px-2.5 text-[10px] font-bold border-none data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded"
+                  >
+                    {tf}
+                  </TabsTrigger>
                 ))}
               </TabsList>
             </Tabs>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <TooltipProvider>
-              <div className="flex items-center bg-muted/30 rounded-lg p-1 mr-4 border border-border/50">
+              <div className="flex items-center gap-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button 
@@ -154,19 +155,6 @@ export default function DashboardPage() {
                   <TooltipContent>SMA</TooltipContent>
                 </Tooltip>
                 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="ghost" size="icon" 
-                      className={cn("h-8 w-8", indicators.ema.enabled && "text-yellow-400 bg-yellow-400/10")}
-                      onClick={() => toggleIndicator('ema')}
-                    >
-                      <Waves className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>EMA</TooltipContent>
-                </Tooltip>
-
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button 
@@ -187,61 +175,75 @@ export default function DashboardPage() {
                     <Button 
                       variant="ghost" size="icon" 
                       className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={resetChart}
+                      onClick={() => chartRef.current?.resetView()}
                     >
-                      <RefreshCw className="h-4 w-4" />
+                      <RefreshCw className="h-3.5 w-3.5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Reset View</TooltipContent>
+                  <TooltipContent>Reset Chart</TooltipContent>
                 </Tooltip>
               </div>
             </TooltipProvider>
 
+            <div className="h-4 w-px bg-border/50 mx-2" />
+
             <Button 
               onClick={runAnalysis} 
               disabled={isAnalyzing}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-9 gap-2 shadow-lg shadow-primary/20"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-8 text-[10px] uppercase tracking-wider px-4 shadow-lg shadow-primary/20"
             >
-              <Zap className={cn("w-4 h-4", isAnalyzing && "animate-pulse")} />
-              {isAnalyzing ? "Analyzing..." : "Analyze Now"}
+              <Zap className={cn("w-3.5 h-3.5 mr-1.5", isAnalyzing && "animate-pulse")} />
+              {isAnalyzing ? "Analysing" : "Analise"}
             </Button>
             
             <Button 
               variant="ghost" 
               size="icon" 
-              className={cn("h-9 w-9 text-muted-foreground", showIndicatorSettings && "text-primary bg-primary/10")}
+              className={cn("h-8 w-8 text-muted-foreground", showIndicatorSettings && "text-primary bg-primary/10")}
               onClick={() => setShowIndicatorSettings(!showIndicatorSettings)}
             >
-              <Settings2 className="w-5 h-5" />
+              <Settings2 className="w-4 h-4" />
             </Button>
           </div>
         </header>
 
-        <div className="flex-1 relative bg-[#0B0E11]">
-          <div className="absolute top-4 left-6 z-10 pointer-events-none">
+        {/* Chart Viewport */}
+        <div className="flex-1 relative bg-[#0B0E11] overflow-hidden">
+          {/* Chart Overlay Info */}
+          <div className="absolute top-4 left-4 z-10 pointer-events-none space-y-1">
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-headline">{activePair}</span>
-              <span className="text-sm font-mono text-muted-foreground">{activeTimeframe} · FX Market</span>
+              <span className="text-xl font-bold font-headline tracking-tighter text-foreground/90">{activePair}</span>
+              <span className="text-[10px] font-mono font-bold text-muted-foreground bg-muted/20 px-1.5 py-0.5 rounded">OANDA</span>
+            </div>
+            <div className="flex gap-3 text-[10px] font-mono text-muted-foreground">
+              <span>O: <span className="text-foreground font-bold">1.0821</span></span>
+              <span>H: <span className="text-foreground font-bold">1.0845</span></span>
+              <span>L: <span className="text-foreground font-bold">1.0815</span></span>
+              <span>C: <span className="text-green-400 font-bold">1.0832</span></span>
             </div>
           </div>
-          
+
           <div className="h-full w-full">
             <TradingChart ref={chartRef} data={data} indicators={indicators} />
           </div>
         </div>
 
-        <footer className="h-10 border-t bg-card/50 flex items-center justify-between px-4 text-[11px] font-medium text-muted-foreground">
+        {/* Status Bar */}
+        <footer className="h-8 border-t bg-sidebar/80 backdrop-blur-md flex items-center justify-between px-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest overflow-hidden">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span>Real-time Data Streaming</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+              <span>Streaming Data</span>
             </div>
-            <div className="h-4 w-px bg-border" />
-            <span>Interactive Chart Enabled (Scroll to Zoom, Drag to Pan)</span>
+            <div className="h-3 w-px bg-border/50" />
+            <span>UTC-5: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
-          <div className="flex items-center gap-4">
-            <span>Latency: 14ms</span>
-            <span>UTC-5: {new Date().toLocaleTimeString()}</span>
+          <div className="flex items-center gap-4 font-mono">
+            <span>Lat: 12ms</span>
+            <div className="flex items-center gap-2">
+              <Share2 className="w-3 h-3 cursor-pointer hover:text-foreground" />
+              <Maximize2 className="w-3 h-3 cursor-pointer hover:text-foreground" />
+            </div>
           </div>
         </footer>
       </main>
