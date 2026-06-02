@@ -14,9 +14,16 @@ import {
   ArrowRightCircle,
   Stethoscope,
   Scale,
-  CheckCircle2
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from '@/lib/utils';
 import { ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 
@@ -123,14 +130,18 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
                   </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-destructive/5 border border-destructive/20">
-                  <div className="flex items-center gap-1.5 mb-1.5">
+                <div className="p-3 rounded-xl bg-destructive/5 border border-destructive/20 space-y-2">
+                  <div className="flex items-center gap-1.5">
                     <ShieldAlert className="w-3 h-3 text-destructive" />
-                    <span className="text-[9px] font-bold text-destructive uppercase tracking-widest">Risk Disclaimer</span>
+                    <span className="text-[9px] font-bold text-destructive uppercase tracking-widest">Risk Warning</span>
                   </div>
                   <p className="text-[9px] leading-tight text-muted-foreground italic">
                     {signal.riskWarning}
                   </p>
+                  <div className="pt-2 border-t border-destructive/10">
+                    <p className="text-[8px] text-destructive/60 font-bold uppercase leading-none">AI Disclaimer</p>
+                    <p className="text-[8px] text-muted-foreground mt-1">This analysis is based on rule-based algorithmic approximations and LLM synthesis. It is not financial advice.</p>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -142,9 +153,21 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
 
           {/* Pattern Health */}
           <section>
-            <div className="flex items-center gap-1.5 mb-3">
-              <Stethoscope className="w-3.5 h-3.5 text-accent" />
-              <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Pattern Detection</h3>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5">
+                <Stethoscope className="w-3.5 h-3.5 text-accent" />
+                <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Rule-Based Patterns</h3>
+              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <AlertTriangle className="w-3 h-3 text-muted-foreground/50 hover:text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[200px] text-[10px]">
+                    Patterns are identified using deterministic mathematical rules. False positives are common.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
             
             <div className="space-y-2">

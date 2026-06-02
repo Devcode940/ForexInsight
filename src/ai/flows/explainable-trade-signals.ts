@@ -45,7 +45,7 @@ const ExplainableTradeSignalsOutputSchema = z.object({
   confidence: z.number().min(1).max(10).describe('Confidence level from 1 to 10 based on signal confluence.'),
   confluenceFactors: z.array(z.string()).describe('List of specific technical factors that align for this signal (e.g., "RSI Oversold + Hammer").'),
   reasoning: z.string().describe('Detailed reasoning for this analysis, explaining how indicators and patterns confirm each other.'),
-  riskWarning: z.string().describe('A standard risk warning.'),
+  riskWarning: z.string().describe('A specific risk warning for this trade.'),
 });
 export type ExplainableTradeSignalsOutput = z.infer<typeof ExplainableTradeSignalsOutputSchema>;
 
@@ -72,6 +72,7 @@ Analysis Requirements:
 2. **Trend Context**: Determine if the trend is with or against the signal.
 3. **Risk Management**: Suggest a Stop Loss and Take Profit that provides a logical Risk-Reward Ratio (ideally 1:2 or better).
 4. **Confidence Rating**: If indicators and patterns both point the same way, confidence should be high (8-10). If they conflict, be neutral or low confidence.
+5. **Mandatory Warning**: ALWAYS include a risk warning stating that trading involves high risk and this is not financial advice.
 
 {{#each candles}}
 Candle: {{timestamp}}, O: {{open}}, H: {{high}}, L: {{low}}, C: {{close}}

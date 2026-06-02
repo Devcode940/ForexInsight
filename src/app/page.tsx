@@ -17,7 +17,8 @@ import {
   Maximize2,
   Share2,
   ChevronDown,
-  Globe
+  Globe,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   Tooltip,
@@ -104,7 +105,7 @@ export default function DashboardPage() {
     
     setIsAnalyzing(true);
     try {
-      const recentCandles = data.slice(-100); // Send up to 100 candles as requested
+      const recentCandles = data.slice(-100); 
       const localPatterns = detectPatterns(recentCandles);
       const patternNames = Array.from(new Set(localPatterns.map(p => p.text)));
 
@@ -119,14 +120,13 @@ export default function DashboardPage() {
           timestamp: Number(c.time) * 1000
         })),
         indicators: {
-          rsi: 62.5, // These would ideally be calculated from data dynamically
+          rsi: 62.5, 
           sma: recentCandles[recentCandles.length - 1].close * 0.998,
         },
         detectedPatterns: patternNames
       });
       setSignal(result);
 
-      // Also run pattern recognition flow for the UI display
       const patternResult = await detectCandlestickPatterns({
         candles: data.slice(-20).map(c => ({
           ...c,
@@ -140,7 +140,7 @@ export default function DashboardPage() {
       console.error("Analysis failed:", error);
       toast({
         title: "Analysis Failed",
-        description: "Could not complete AI analysis. Check your Gemini API settings.",
+        description: "Could not complete AI analysis. Please try again later.",
         variant: "destructive"
       });
     } finally {
@@ -290,17 +290,20 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <footer className="h-8 border-t bg-sidebar/80 backdrop-blur-md flex items-center justify-between px-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest overflow-hidden">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5">
+        <footer className="h-10 border-t bg-sidebar/80 backdrop-blur-md flex items-center justify-between px-4 text-[9px] font-bold text-muted-foreground uppercase tracking-wider overflow-hidden">
+          <div className="flex items-center gap-4 flex-1">
+            <div className="flex items-center gap-1.5 shrink-0">
               <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.5)]", isRealData ? "bg-green-500" : "bg-blue-500")} />
               <span>{isRealData ? "Live Data" : "Mock Stream"}</span>
             </div>
-            <div className="h-3 w-px bg-border/50" />
-            <span>UTC: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+            <div className="h-3 w-px bg-border/50 shrink-0" />
+            <div className="flex items-center gap-2 text-destructive/80 italic overflow-hidden">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              <span className="truncate">Disclaimer: All signals and patterns are rule-based approximations and do not constitute financial advice. Past performance is not indicative of future results.</span>
+            </div>
           </div>
-          <div className="flex items-center gap-4 font-mono">
-            <span>{isRealData ? "Source: Alpha Vantage" : "Offline Simulation"}</span>
+          <div className="flex items-center gap-4 font-mono ml-4 shrink-0">
+            <span>UTC: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
             <div className="flex items-center gap-2">
               <Share2 className="w-3 h-3 cursor-pointer hover:text-foreground" />
               <Maximize2 className="w-3 h-3 cursor-pointer hover:text-foreground" />
