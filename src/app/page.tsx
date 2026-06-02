@@ -25,7 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { generateMockForexData, Candlestick } from '@/lib/forex-data-utils';
+import { generateMockForexData, Candlestick, detectPatterns } from '@/lib/forex-data-utils';
 import { getExplainableTradeSignals, ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 import { detectCandlestickPatterns } from '@/ai/flows/candlestick-pattern-recognition';
 import { fetchAlphaVantageData } from '@/app/actions/market-data';
@@ -60,14 +60,12 @@ export default function DashboardPage() {
   const loadMarketData = async () => {
     setIsLoadingData(true);
     try {
-      // Attempt real data fetch
-      // Map timeframe names to Alpha Vantage intervals
       const intervalMap: Record<string, string> = {
         '1m': '1min',
         '5m': '5min',
         '15m': '15min',
         '1H': '60min',
-        '4H': '60min', // AV doesn't have 4H FX intraday directly in standard plan
+        '4H': '60min', 
         'D': 'daily'
       };
 
@@ -77,7 +75,6 @@ export default function DashboardPage() {
         setData(realData);
         setIsRealData(true);
       } else {
-        // Fallback to mock data
         const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
         setData(mockData);
         setIsRealData(false);
@@ -96,36 +93,46 @@ export default function DashboardPage() {
   }, [activePair, activeTimeframe]);
 
   const runAnalysis = async () => {
-    if (data.length < 20) return;
+    if (data.length < 50) {
+      toast({
+        title: "Insufficient Data",
+        description: "AI analysis requires at least 50 candles of data.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setIsAnalyzing(true);
     try {
-      const currentCandle = data[data.length - 1];
-      const recentCandles = data.slice(-10);
+      const recentCandles = data.slice(-100); // Send up to 100 candles as requested
+      const localPatterns = detectPatterns(recentCandles);
+      const patternNames = Array.from(new Set(localPatterns.map(p => p.text)));
 
       const result = await getExplainableTradeSignals({
         currencyPair: activePair,
         timeframe: activeTimeframe,
-        currentCandle: {
-          ...currentCandle,
-          timestamp: Number(currentCandle.time) * 1000
-        },
-        recentCandles: recentCandles.map(c => ({
-          ...c,
+        candles: recentCandles.map(c => ({
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
           timestamp: Number(c.time) * 1000
         })),
         indicators: {
-          rsi: 62.5,
-          sma: [{ period: indicators.sma.period, value: currentCandle.close * 0.999 }]
-        }
+          rsi: 62.5, // These would ideally be calculated from data dynamically
+          sma: recentCandles[recentCandles.length - 1].close * 0.998,
+        },
+        detectedPatterns: patternNames
       });
       setSignal(result);
 
+      // Also run pattern recognition flow for the UI display
       const patternResult = await detectCandlestickPatterns({
-        candles: recentCandles.map(c => ({
+        candles: data.slice(-20).map(c => ({
           ...c,
           time: new Date(Number(c.time) * 1000).toISOString()
         })),
-        marketContext: `Strong trend on ${activeTimeframe}`
+        marketContext: `Market behavior on ${activePair} ${activeTimeframe}`
       });
       setPatterns(patternResult.patterns);
 
@@ -133,7 +140,7 @@ export default function DashboardPage() {
       console.error("Analysis failed:", error);
       toast({
         title: "Analysis Failed",
-        description: "Could not complete AI analysis of the current market state.",
+        description: "Could not complete AI analysis. Check your Gemini API settings.",
         variant: "destructive"
       });
     } finally {
@@ -153,7 +160,6 @@ export default function DashboardPage() {
       <WatchlistSidebar activePair={activePair} onSelectPair={setActivePair} />
 
       <main className="flex-1 flex flex-col min-w-0">
-        {/* Main Toolbar */}
         <header className="h-12 border-b flex items-center justify-between px-4 bg-sidebar/50 backdrop-blur-md z-20">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 group cursor-pointer hover:bg-muted/50 px-2 py-1 rounded transition-colors">
@@ -238,7 +244,7 @@ export default function DashboardPage() {
               className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-8 text-[10px] uppercase tracking-wider px-4 shadow-lg shadow-primary/20"
             >
               <Zap className={cn("w-3.5 h-3.5 mr-1.5", isAnalyzing && "animate-pulse")} />
-              {isAnalyzing ? "Analysing" : "Analise"}
+              {isAnalyzing ? "Analysing" : "Get AI Analysis"}
             </Button>
             
             <Button 
@@ -252,7 +258,6 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {/* Chart Viewport */}
         <div className="flex-1 relative bg-[#0B0E11] overflow-hidden">
           {isLoadingData && (
             <div className="absolute inset-0 z-50 bg-background/50 backdrop-blur-sm flex items-center justify-center">
@@ -263,7 +268,6 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Chart Overlay Info */}
           <div className="absolute top-4 left-4 z-10 pointer-events-none space-y-1">
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold font-headline tracking-tighter text-foreground/90">{activePair}</span>
@@ -286,7 +290,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Status Bar */}
         <footer className="h-8 border-t bg-sidebar/80 backdrop-blur-md flex items-center justify-between px-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest overflow-hidden">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
