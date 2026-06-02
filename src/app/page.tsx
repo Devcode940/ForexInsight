@@ -16,7 +16,8 @@ import {
   LineChart,
   Waves,
   Layers,
-  TrendingUp
+  TrendingUp,
+  BarChart2
 } from 'lucide-react';
 import { 
   Tooltip,
@@ -51,7 +52,6 @@ export default function DashboardPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
-    // Simulate loading data for pair
     const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
     setData(mockData);
   }, [activePair, activeTimeframe]);
@@ -63,7 +63,6 @@ export default function DashboardPage() {
       const currentCandle = data[data.length - 1];
       const recentCandles = data.slice(-10);
 
-      // Call GenAI Flow for Signals
       const result = await getExplainableTradeSignals({
         currencyPair: activePair,
         timeframe: activeTimeframe,
@@ -76,13 +75,12 @@ export default function DashboardPage() {
           timestamp: Number(c.time) * 1000
         })),
         indicators: {
-          rsi: 62.5, // Mock current RSI
+          rsi: 62.5,
           sma: [{ period: indicators.sma.period, value: currentCandle.close * 0.999 }]
         }
       });
       setSignal(result);
 
-      // Call GenAI Flow for Pattern Recognition
       const patternResult = await detectCandlestickPatterns({
         candles: recentCandles.map(c => ({
           ...c,
@@ -113,12 +111,9 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
-      {/* Fixed Watchlist Sidebar */}
       <WatchlistSidebar activePair={activePair} onSelectPair={setActivePair} />
 
-      {/* Main Chart Area */}
       <main className="flex-1 flex flex-col min-w-0 bg-background">
-        {/* Header Controls */}
         <header className="h-16 border-b flex items-center justify-between px-6 bg-card/30">
           <div className="flex items-center gap-6">
             <h1 className="text-xl font-headline font-bold flex items-center gap-2">
@@ -170,13 +165,13 @@ export default function DashboardPage() {
                   <TooltipTrigger asChild>
                     <Button 
                       variant="ghost" size="icon" 
-                      className={cn("h-8 w-8", indicators.bb.enabled && "text-accent bg-accent/10")}
-                      onClick={() => toggleIndicator('bb')}
+                      className={cn("h-8 w-8", indicators.rsi.enabled && "text-purple-400 bg-purple-400/10")}
+                      onClick={() => toggleIndicator('rsi')}
                     >
-                      <Layers className="h-4 w-4" />
+                      <Activity className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Bollinger Bands</TooltipContent>
+                  <TooltipContent>RSI (Period: {indicators.rsi.period})</TooltipContent>
                 </Tooltip>
               </div>
             </TooltipProvider>
@@ -201,7 +196,6 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {/* Chart Viewport */}
         <div className="flex-1 relative bg-[#0B0E11]">
           <div className="absolute top-4 left-6 z-10 pointer-events-none">
             <div className="flex items-baseline gap-2">
@@ -210,21 +204,11 @@ export default function DashboardPage() {
             </div>
           </div>
           
-          <div className="absolute right-4 top-4 z-10 flex flex-col gap-2">
-            <Button variant="secondary" size="icon" className="bg-black/40 hover:bg-black/60 border-none backdrop-blur-sm">
-              <Maximize2 className="w-4 h-4" />
-            </Button>
-            <Button variant="secondary" size="icon" className="bg-black/40 hover:bg-black/60 border-none backdrop-blur-sm">
-              <Activity className="w-4 h-4" />
-            </Button>
-          </div>
-
           <div className="h-full w-full">
             <TradingChart data={data} indicators={indicators} />
           </div>
         </div>
 
-        {/* Bottom Status Bar */}
         <footer className="h-10 border-t bg-card/50 flex items-center justify-between px-4 text-[11px] font-medium text-muted-foreground">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
@@ -241,7 +225,6 @@ export default function DashboardPage() {
         </footer>
       </main>
 
-      {/* Conditional Sidebar Panel */}
       {showIndicatorSettings ? (
         <IndicatorSettingsSidebar 
           indicators={indicators} 

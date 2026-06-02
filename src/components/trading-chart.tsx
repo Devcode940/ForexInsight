@@ -2,14 +2,21 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts';
-import { Candlestick } from '@/lib/forex-data-utils';
+import { 
+  createChart, 
+  ColorType, 
+  IChartApi, 
+  ISeriesApi, 
+  CandlestickData, 
+  Time,
+  SeriesMarker
+} from 'lightweight-charts';
+import { Candlestick, detectBullishEngulfing } from '@/lib/forex-data-utils';
 import { IndicatorsState } from '@/components/indicator-settings-sidebar';
 
 interface TradingChartProps {
   data: Candlestick[];
   indicators: IndicatorsState;
-  patterns?: any[];
 }
 
 export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) => {
@@ -18,6 +25,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const smaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const emaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdSignalSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdHistSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -66,8 +77,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
   }, []);
 
   useEffect(() => {
-    if (candlestickSeriesRef.current && data) {
+    if (candlestickSeriesRef.current && data.length > 0) {
       candlestickSeriesRef.current.setData(data as CandlestickData<Time>[]);
+      
+      // Pattern recognition markers
+      const markers = detectBullishEngulfing(data) as SeriesMarker<Time>[];
+      candlestickSeriesRef.current.setMarkers(markers);
     }
   }, [data]);
 
@@ -129,6 +144,28 @@ export const TradingChart: React.FC<TradingChartProps> = ({ data, indicators }) 
     } else if (emaSeriesRef.current) {
       chartRef.current.removeSeries(emaSeriesRef.current);
       emaSeriesRef.current = null;
+    }
+
+    // RSI Logic (on separate price scale)
+    if (indicators.rsi.enabled) {
+      if (!rsiSeriesRef.current) {
+        rsiSeriesRef.current = chartRef.current.addLineSeries({
+          color: indicators.rsi.color,
+          lineWidth: 2,
+          title: 'RSI',
+          priceScaleId: 'rsi-scale',
+        });
+        chartRef.current.priceScale('rsi-scale').applyOptions({
+          scaleMargins: { top: 0.8, bottom: 0.05 },
+        });
+      }
+      
+      const { calculateRSI } = require('@/lib/forex-data-utils');
+      const rsiData = calculateRSI(data, indicators.rsi.period);
+      rsiSeriesRef.current.setData(rsiData);
+    } else if (rsiSeriesRef.current) {
+      chartRef.current.removeSeries(rsiSeriesRef.current);
+      rsiSeriesRef.current = null;
     }
   }, [indicators, data]);
 
