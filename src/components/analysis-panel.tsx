@@ -17,7 +17,8 @@ import {
   History,
   TrendingUp,
   TrendingDown,
-  Calendar
+  Calendar,
+  X
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
@@ -31,15 +32,18 @@ import { ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-sign
 import { getSignalHistory, StoredSignal } from '@/lib/firebase/store';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface AnalysisPanelProps {
   signal?: ExplainableTradeSignalsOutput;
   patterns?: any[];
   isLoading?: boolean;
+  onClose?: () => void;
 }
 
-export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns = [], isLoading }) => {
+export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns = [], isLoading, onClose }) => {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [view, setView] = useState<'current' | 'history'>('current');
   const [history, setHistory] = useState<StoredSignal[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<StoredSignal | null>(null);
@@ -53,13 +57,13 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
   const activeSignal = view === 'history' ? selectedHistory : signal;
 
   return (
-    <div className="w-80 border-l bg-sidebar flex flex-col h-full overflow-hidden">
+    <div className="w-full h-full border-l bg-sidebar flex flex-col overflow-hidden">
       <div className="p-4 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BrainCircuit className="w-4 h-4 text-accent" />
           <h2 className="text-sm font-bold tracking-tight uppercase">AI Confluence</h2>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 items-center">
           <Button 
             variant="ghost" 
             size="icon" 
@@ -76,6 +80,11 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
           >
             <History className="h-4 w-4" />
           </Button>
+          {isMobile && onClose && (
+            <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7 ml-1">
+              <X className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
 

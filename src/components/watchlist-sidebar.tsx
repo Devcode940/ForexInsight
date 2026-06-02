@@ -3,11 +3,12 @@
 import React, { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, TrendingDown, LayoutGrid, Search, Bell, Sparkles, Send } from 'lucide-react';
+import { TrendingUp, TrendingDown, LayoutGrid, Search, Bell, Sparkles, Send, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const WATCHLIST_ITEMS = [
   { pair: 'EURUSD', price: '1.08420', change: '+0.15%', sentiment: 'Bullish', color: 'text-green-400' },
@@ -22,9 +23,11 @@ const WATCHLIST_ITEMS = [
 interface WatchlistSidebarProps {
   activePair: string;
   onSelectPair: (pair: string) => void;
+  onClose?: () => void;
 }
 
-export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({ activePair, onSelectPair }) => {
+export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({ activePair, onSelectPair, onClose }) => {
+  const isMobile = useIsMobile();
   const [email, setEmail] = useState('');
   const [joined, setJoined] = useState(false);
 
@@ -37,14 +40,21 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({ activePair, 
   };
 
   return (
-    <div className="w-72 border-r bg-sidebar h-full flex flex-col overflow-hidden">
+    <div className="w-full h-full border-r bg-sidebar flex flex-col overflow-hidden">
       <div className="p-4 space-y-4 border-b">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <LayoutGrid className="w-4 h-4 text-primary" />
             <h2 className="text-sm font-bold tracking-tight uppercase">Watchlist</h2>
           </div>
-          <Bell className="w-4 h-4 text-muted-foreground hover:text-foreground cursor-pointer transition-colors" />
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-muted-foreground hover:text-foreground cursor-pointer transition-colors" />
+            {isMobile && onClose && (
+              <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 -mr-2">
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

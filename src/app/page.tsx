@@ -24,7 +24,9 @@ import {
   PanelRight,
   MessageSquare,
   Wifi,
-  WifiOff
+  WifiOff,
+  Menu,
+  X
 } from 'lucide-react';
 import { 
   Tooltip,
@@ -39,12 +41,14 @@ import { fetchFinnhubCandles } from '@/app/actions/market-data';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { saveUserPreferences, getUserPreferences, saveTradeSignal } from '@/lib/firebase/store';
 
 const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', 'D', 'W', 'M'];
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [activePair, setActivePair] = useState('XAUUSD');
   const [activeTimeframe, setActiveTimeframe] = useState('1H');
   const [customAiInstructions, setCustomAiInstructions] = useState('');
@@ -75,6 +79,18 @@ export default function DashboardPage() {
   const [signal, setSignal] = useState<ExplainableTradeSignalsOutput | undefined>();
   const [patterns, setPatterns] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Handle responsive sidebar behavior
+  useEffect(() => {
+    if (isMobile) {
+      setShowWatchlist(false);
+      setShowAnalysisPanel(false);
+      setShowIndicatorSettings(false);
+    } else {
+      setShowWatchlist(true);
+      setShowAnalysisPanel(true);
+    }
+  }, [isMobile]);
 
   // Sync with Firestore when logged in
   useEffect(() => {
@@ -185,6 +201,8 @@ export default function DashboardPage() {
     }
     
     setIsAnalyzing(true);
+    if (isMobile) setShowAnalysisPanel(true); // Auto-open panel on mobile
+
     try {
       const recentCandles = data.slice(-100); 
       const localPatterns = detectPatterns(recentCandles);
@@ -209,7 +227,6 @@ export default function DashboardPage() {
       });
       setSignal(result);
 
-      // Save to history if logged in
       if (user) {
         await saveTradeSignal(user.uid, result, activePair, activeTimeframe);
       }
@@ -241,39 +258,73 @@ export default function DashboardPage() {
     }));
   };
 
+  const closeSidebars = () => {
+    setShowWatchlist(false);
+    setShowAnalysisPanel(false);
+    setShowIndicatorSettings(false);
+  };
+
   return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden selection:bg-primary/30">
-      {showWatchlist && (
-        <WatchlistSidebar activePair={activePair} onSelectPair={setActivePair} />
+    <div className="flex h-screen bg-background text-foreground overflow-hidden selection:bg-primary/30 relative">
+      {/* Mobile Backdrops */}
+      {isMobile && (showWatchlist || showAnalysisPanel || showIndicatorSettings) && (
+        <div 
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 animate-in fade-in duration-200" 
+          onClick={closeSidebars}
+        />
       )}
 
+      {/* Watchlist Sidebar */}
+      <aside className={cn(
+        "z-40 transition-all duration-300 ease-in-out",
+        isMobile ? "fixed inset-y-0 left-0 shadow-2xl" : "relative border-r shrink-0",
+        showWatchlist ? "translate-x-0 w-72" : "-translate-x-full w-0"
+      )}>
+        {showWatchlist && (
+          <WatchlistSidebar 
+            activePair={activePair} 
+            onSelectPair={(p) => {
+              setActivePair(p);
+              if (isMobile) setShowWatchlist(false);
+            }} 
+            onClose={() => setShowWatchlist(false)}
+          />
+        )}
+      </aside>
+
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-12 border-b flex items-center justify-between px-4 bg-sidebar/50 backdrop-blur-md z-20">
-          <div className="flex items-center gap-4">
+        <header className="h-12 border-b flex items-center justify-between px-2 sm:px-4 bg-sidebar/50 backdrop-blur-md z-20">
+          <div className="flex items-center gap-2 sm:gap-4">
             <Button 
               variant="ghost" 
               size="icon" 
               className={cn("h-8 w-8", showWatchlist ? "text-primary" : "text-muted-foreground")}
-              onClick={() => setShowWatchlist(!showWatchlist)}
+              onClick={() => {
+                setShowWatchlist(!showWatchlist);
+                if (isMobile && !showWatchlist) {
+                  setShowAnalysisPanel(false);
+                  setShowIndicatorSettings(false);
+                }
+              }}
             >
               <PanelLeft className="h-4 w-4" />
             </Button>
 
-            <div className="h-4 w-px bg-border/50" />
+            <div className="h-4 w-px bg-border/50 hidden sm:block" />
 
-            <div className="flex items-center gap-2 group cursor-pointer hover:bg-muted/50 px-2 py-1 rounded transition-colors">
-              <span className="text-sm font-bold tracking-tight">{activePair}</span>
+            <div className="flex items-center gap-1 sm:gap-2 group cursor-pointer hover:bg-muted/50 px-1 sm:px-2 py-1 rounded transition-colors shrink-0">
+              <span className="text-xs sm:text-sm font-bold tracking-tight">{activePair}</span>
               <ChevronDown className="w-3 h-3 text-muted-foreground group-hover:text-foreground" />
             </div>
             
-            <div className="h-4 w-px bg-border/50" />
+            <div className="h-4 w-px bg-border/50 hidden sm:block" />
 
             <Tabs value={activeTimeframe} onValueChange={setActiveTimeframe} className="h-8">
-              <TabsList className="bg-transparent h-8 p-0 gap-1 overflow-x-auto max-w-[300px] flex-nowrap scrollbar-none">
+              <TabsList className="bg-transparent h-8 p-0 gap-1 overflow-x-auto max-w-[120px] sm:max-w-[300px] flex-nowrap scrollbar-none">
                 {TIMEFRAMES.map(tf => (
                   <TabsTrigger 
                     key={tf} value={tf} 
-                    className="h-7 px-2.5 text-[10px] font-bold border-none data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded shrink-0"
+                    className="h-7 px-2 text-[9px] sm:text-[10px] font-bold border-none data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded shrink-0"
                   >
                     {tf}
                   </TabsTrigger>
@@ -281,7 +332,7 @@ export default function DashboardPage() {
               </TabsList>
             </Tabs>
 
-            <div className="flex items-center gap-1.5 ml-2">
+            <div className="hidden lg:flex items-center gap-1.5 ml-2">
               <Badge variant={isRealData ? "default" : "secondary"} className="text-[9px] h-4 px-1.5 font-bold uppercase tracking-wider">
                 {isRealData ? "Live" : "Demo"}
               </Badge>
@@ -297,9 +348,9 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <TooltipProvider>
-              <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            <div className="hidden sm:flex items-center gap-1">
+              <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button 
@@ -325,21 +376,22 @@ export default function DashboardPage() {
                   </TooltipTrigger>
                   <TooltipContent>RSI</TooltipContent>
                 </Tooltip>
-              </div>
-            </TooltipProvider>
+              </TooltipProvider>
+            </div>
 
-            <div className="h-4 w-px bg-border/50 mx-2" />
+            <div className="h-4 w-px bg-border/50 mx-1 sm:mx-2 hidden sm:block" />
 
             <Button 
               onClick={runAnalysis} 
               disabled={isAnalyzing || isLoadingData}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-8 text-[10px] uppercase tracking-wider px-4 shadow-lg shadow-primary/20"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-8 text-[9px] sm:text-[10px] uppercase tracking-wider px-2 sm:px-4 shadow-lg shadow-primary/20"
             >
-              <Zap className={cn("w-3.5 h-3.5 mr-1.5", isAnalyzing && "animate-pulse")} />
-              {isAnalyzing ? "Analysing" : "AI Analysis"}
+              <Zap className={cn("w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 sm:mr-1.5", isAnalyzing && "animate-pulse")} />
+              <span className="hidden xs:inline">{isAnalyzing ? "Analysing" : "AI Analysis"}</span>
+              <span className="xs:hidden">AI</span>
             </Button>
             
-            <div className="h-4 w-px bg-border/50 mx-2" />
+            <div className="h-4 w-px bg-border/50 mx-1 sm:mx-2" />
 
             <Button 
               variant="ghost" 
@@ -347,7 +399,8 @@ export default function DashboardPage() {
               className={cn("h-8 w-8", showIndicatorSettings ? "text-primary" : "text-muted-foreground")}
               onClick={() => {
                 setShowIndicatorSettings(!showIndicatorSettings);
-                if (!showIndicatorSettings) setShowAnalysisPanel(false);
+                setShowAnalysisPanel(false);
+                if (isMobile && !showIndicatorSettings) setShowWatchlist(false);
               }}
             >
               <Settings2 className="w-4 h-4" />
@@ -359,13 +412,14 @@ export default function DashboardPage() {
               className={cn("h-8 w-8", showAnalysisPanel ? "text-primary" : "text-muted-foreground")}
               onClick={() => {
                 setShowAnalysisPanel(!showAnalysisPanel);
-                if (!showAnalysisPanel) setShowIndicatorSettings(false);
+                setShowIndicatorSettings(false);
+                if (isMobile && !showAnalysisPanel) setShowWatchlist(false);
               }}
             >
               <MessageSquare className="w-4 h-4" />
             </Button>
 
-            <div className="h-4 w-px bg-border/50 mx-2" />
+            <div className="h-4 w-px bg-border/50 mx-1 sm:mx-2" />
             
             <UserNav />
           </div>
@@ -376,7 +430,7 @@ export default function DashboardPage() {
             <div className="absolute inset-0 z-50 bg-background/50 backdrop-blur-sm flex items-center justify-center">
               <div className="flex flex-col items-center gap-3">
                 <RefreshCw className="w-8 h-8 text-primary animate-spin" />
-                <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Syncing Data...</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Syncing Data...</span>
               </div>
             </div>
           )}
@@ -387,34 +441,47 @@ export default function DashboardPage() {
         </div>
 
         <footer className="h-10 border-t bg-sidebar/80 backdrop-blur-md flex items-center justify-between px-4 text-[9px] font-bold text-muted-foreground uppercase tracking-wider overflow-hidden">
-          <div className="flex items-center gap-4 flex-1">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
             <div className="flex items-center gap-1.5 shrink-0">
               <div className={cn("w-1.5 h-1.5 rounded-full", isRealData ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" : "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]")} />
-              <span>{isRealData ? "Finnhub Live" : "Demo Engine"}</span>
+              <span className="hidden xs:inline">{isRealData ? "Finnhub Live" : "Demo Engine"}</span>
             </div>
-            <div className="h-3 w-px bg-border/50 shrink-0" />
+            <div className="h-3 w-px bg-border/50 shrink-0 hidden sm:block" />
             <div className="flex items-center gap-2 text-destructive/80 italic overflow-hidden">
               <AlertTriangle className="w-3 h-3 shrink-0" />
-              <span className="truncate">Disclaimer: AI signals are rule-based approximations and do not constitute financial advice.</span>
+              <span className="truncate">Disclaimer: AI signals are not financial advice.</span>
             </div>
           </div>
-          <div className="flex items-center gap-4 font-mono ml-4 shrink-0">
+          <div className="hidden md:flex items-center gap-4 font-mono ml-4 shrink-0">
             <span>UTC: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
           </div>
         </footer>
       </main>
 
-      {showIndicatorSettings && (
-        <IndicatorSettingsSidebar 
-          indicators={indicators} 
-          setIndicators={setIndicators} 
-          onClose={() => setShowIndicatorSettings(false)} 
-        />
-      )}
+      {/* Right Side Panels */}
+      <aside className={cn(
+        "z-40 transition-all duration-300 ease-in-out shrink-0",
+        isMobile ? "fixed inset-y-0 right-0 shadow-2xl" : "relative border-l",
+        (showIndicatorSettings || showAnalysisPanel) ? "translate-x-0 w-80" : "translate-x-full w-0"
+      )}>
+        {showIndicatorSettings && (
+          <IndicatorSettingsSidebar 
+            indicators={indicators} 
+            setIndicators={setIndicators} 
+            onClose={() => setShowIndicatorSettings(false)} 
+          />
+        )}
 
-      {showAnalysisPanel && (
-        <AnalysisPanel signal={signal} patterns={patterns} isLoading={isAnalyzing} />
-      )}
+        {showAnalysisPanel && (
+          <AnalysisPanel 
+            signal={signal} 
+            patterns={patterns} 
+            isLoading={isAnalyzing} 
+            onClose={() => setShowAnalysisPanel(false)}
+          />
+        )}
+      </aside>
     </div>
   );
 }
+

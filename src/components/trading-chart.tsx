@@ -107,19 +107,17 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     candlestickSeriesRef.current = candlestickSeries;
     volumeSeriesRef.current = volumeSeries;
 
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ 
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight
-        });
-      }
-    };
+    // Use ResizeObserver for more robust responsive scaling
+    const resizeObserver = new ResizeObserver(entries => {
+      if (entries.length === 0 || !chartRef.current) return;
+      const { width, height } = entries[0].contentRect;
+      chartRef.current.applyOptions({ width, height });
+    });
 
-    window.addEventListener('resize', handleResize);
+    resizeObserver.observe(chartContainerRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.remove();
     };
   }, []);
@@ -144,11 +142,6 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       })) as SeriesMarker<Time>[];
       
       candlestickSeriesRef.current.setMarkers(markers);
-      
-      // Auto-fit on load if it's the first time
-      if (chartRef.current && data.length > 0) {
-        // Only fit if data has changed significantly or first load
-      }
     }
   }, [data, indicators.showPatternLabels]);
 
