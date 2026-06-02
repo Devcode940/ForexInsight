@@ -6,18 +6,18 @@ import { TradingChart, TradingChartHandle } from '@/components/trading-chart';
 import { AnalysisPanel } from '@/components/analysis-panel';
 import { IndicatorSettingsSidebar, IndicatorsState } from '@/components/indicator-settings-sidebar';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Settings2, 
   Activity, 
   Zap, 
   LineChart,
-  Waves,
-  TrendingUp,
   RefreshCw,
   Maximize2,
   Share2,
-  ChevronDown
+  ChevronDown,
+  Globe
 } from 'lucide-react';
 import { 
   Tooltip,
@@ -28,7 +28,9 @@ import {
 import { generateMockForexData, Candlestick } from '@/lib/forex-data-utils';
 import { getExplainableTradeSignals, ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 import { detectCandlestickPatterns } from '@/ai/flows/candlestick-pattern-recognition';
+import { fetchAlphaVantageData } from '@/app/actions/market-data';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1H', '4H', 'D'];
 
@@ -36,7 +38,10 @@ export default function DashboardPage() {
   const [activePair, setActivePair] = useState('EURUSD');
   const [activeTimeframe, setActiveTimeframe] = useState('1H');
   const [data, setData] = useState<Candlestick[]>([]);
+  const [isRealData, setIsRealData] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
   const chartRef = useRef<TradingChartHandle>(null);
+  const { toast } = useToast();
   
   // Indicator State
   const [indicators, setIndicators] = useState<IndicatorsState>({
@@ -52,9 +57,42 @@ export default function DashboardPage() {
   const [patterns, setPatterns] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  const loadMarketData = async () => {
+    setIsLoadingData(true);
+    try {
+      // Attempt real data fetch
+      // Map timeframe names to Alpha Vantage intervals
+      const intervalMap: Record<string, string> = {
+        '1m': '1min',
+        '5m': '5min',
+        '15m': '15min',
+        '1H': '60min',
+        '4H': '60min', // AV doesn't have 4H FX intraday directly in standard plan
+        'D': 'daily'
+      };
+
+      const realData = await fetchAlphaVantageData(activePair, intervalMap[activeTimeframe] || '5min');
+      
+      if (realData && realData.length > 0) {
+        setData(realData);
+        setIsRealData(true);
+      } else {
+        // Fallback to mock data
+        const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
+        setData(mockData);
+        setIsRealData(false);
+      }
+    } catch (error) {
+      console.error("Data loading failed:", error);
+      const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
+      setData(mockData);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
   useEffect(() => {
-    const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
-    setData(mockData);
+    loadMarketData();
   }, [activePair, activeTimeframe]);
 
   const runAnalysis = async () => {
@@ -87,21 +125,21 @@ export default function DashboardPage() {
           ...c,
           time: new Date(Number(c.time) * 1000).toISOString()
         })),
-        marketContext: `Strong bullish trend on ${activeTimeframe}`
+        marketContext: `Strong trend on ${activeTimeframe}`
       });
       setPatterns(patternResult.patterns);
 
     } catch (error) {
       console.error("Analysis failed:", error);
+      toast({
+        title: "Analysis Failed",
+        description: "Could not complete AI analysis of the current market state.",
+        variant: "destructive"
+      });
     } finally {
       setIsAnalyzing(false);
     }
   };
-
-  useEffect(() => {
-    const timeout = setTimeout(runAnalysis, 1000);
-    return () => clearTimeout(timeout);
-  }, [data, indicators.sma.period, indicators.ema.period, indicators.bb.period]);
 
   const toggleIndicator = (key: keyof IndicatorsState) => {
     setIndicators(prev => ({
@@ -137,6 +175,13 @@ export default function DashboardPage() {
                 ))}
               </TabsList>
             </Tabs>
+
+            <div className="flex items-center gap-1.5 ml-2">
+              <Badge variant={isRealData ? "default" : "secondary"} className="text-[9px] h-4 px-1.5 font-bold uppercase tracking-wider">
+                {isRealData ? <Globe className="w-2.5 h-2.5 mr-1" /> : null}
+                {isRealData ? "Live" : "Mock"}
+              </Badge>
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -189,7 +234,7 @@ export default function DashboardPage() {
 
             <Button 
               onClick={runAnalysis} 
-              disabled={isAnalyzing}
+              disabled={isAnalyzing || isLoadingData}
               className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-8 text-[10px] uppercase tracking-wider px-4 shadow-lg shadow-primary/20"
             >
               <Zap className={cn("w-3.5 h-3.5 mr-1.5", isAnalyzing && "animate-pulse")} />
@@ -209,18 +254,31 @@ export default function DashboardPage() {
 
         {/* Chart Viewport */}
         <div className="flex-1 relative bg-[#0B0E11] overflow-hidden">
+          {isLoadingData && (
+            <div className="absolute inset-0 z-50 bg-background/50 backdrop-blur-sm flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+                <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Syncing Data...</span>
+              </div>
+            </div>
+          )}
+
           {/* Chart Overlay Info */}
           <div className="absolute top-4 left-4 z-10 pointer-events-none space-y-1">
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold font-headline tracking-tighter text-foreground/90">{activePair}</span>
-              <span className="text-[10px] font-mono font-bold text-muted-foreground bg-muted/20 px-1.5 py-0.5 rounded">OANDA</span>
+              <span className="text-[10px] font-mono font-bold text-muted-foreground bg-muted/20 px-1.5 py-0.5 rounded">
+                {isRealData ? "ALPHA VANTAGE" : "SIMULATED"}
+              </span>
             </div>
-            <div className="flex gap-3 text-[10px] font-mono text-muted-foreground">
-              <span>O: <span className="text-foreground font-bold">1.0821</span></span>
-              <span>H: <span className="text-foreground font-bold">1.0845</span></span>
-              <span>L: <span className="text-foreground font-bold">1.0815</span></span>
-              <span>C: <span className="text-green-400 font-bold">1.0832</span></span>
-            </div>
+            {data.length > 0 && (
+               <div className="flex gap-3 text-[10px] font-mono text-muted-foreground">
+                <span>O: <span className="text-foreground font-bold">{data[data.length-1].open.toFixed(5)}</span></span>
+                <span>H: <span className="text-foreground font-bold">{data[data.length-1].high.toFixed(5)}</span></span>
+                <span>L: <span className="text-foreground font-bold">{data[data.length-1].low.toFixed(5)}</span></span>
+                <span>C: <span className={cn("font-bold", data[data.length-1].close >= data[data.length-1].open ? "text-green-400" : "text-red-400")}>{data[data.length-1].close.toFixed(5)}</span></span>
+              </div>
+            )}
           </div>
 
           <div className="h-full w-full">
@@ -232,14 +290,14 @@ export default function DashboardPage() {
         <footer className="h-8 border-t bg-sidebar/80 backdrop-blur-md flex items-center justify-between px-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest overflow-hidden">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
-              <span>Streaming Data</span>
+              <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.5)]", isRealData ? "bg-green-500" : "bg-blue-500")} />
+              <span>{isRealData ? "Live Data" : "Mock Stream"}</span>
             </div>
             <div className="h-3 w-px bg-border/50" />
-            <span>UTC-5: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span>UTC: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
           </div>
           <div className="flex items-center gap-4 font-mono">
-            <span>Lat: 12ms</span>
+            <span>{isRealData ? "Source: Alpha Vantage" : "Offline Simulation"}</span>
             <div className="flex items-center gap-2">
               <Share2 className="w-3 h-3 cursor-pointer hover:text-foreground" />
               <Maximize2 className="w-3 h-3 cursor-pointer hover:text-foreground" />

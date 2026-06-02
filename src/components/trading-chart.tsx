@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
@@ -11,7 +10,7 @@ import {
   Time,
   SeriesMarker
 } from 'lightweight-charts';
-import { Candlestick, detectBullishEngulfing } from '@/lib/forex-data-utils';
+import { Candlestick, detectPatterns } from '@/lib/forex-data-utils';
 import { IndicatorsState } from '@/components/indicator-settings-sidebar';
 
 interface TradingChartProps {
@@ -112,10 +111,10 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     if (candlestickSeriesRef.current && data.length > 0) {
       candlestickSeriesRef.current.setData(data as CandlestickData<Time>[]);
       
-      const markers = detectBullishEngulfing(data) as SeriesMarker<Time>[];
+      const markers = detectPatterns(data) as SeriesMarker<Time>[];
       candlestickSeriesRef.current.setMarkers(markers);
       
-      // Auto-fit on first load
+      // Auto-fit on load if it's the first time
       if (chartRef.current && data.length > 0) {
         chartRef.current.timeScale().fitContent();
       }
