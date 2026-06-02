@@ -15,7 +15,7 @@ import {
   Zap, 
   Maximize2,
   LineChart,
-  Waveform,
+  Waves,
   TrendingUp
 } from 'lucide-react';
 import { 
@@ -27,9 +27,9 @@ import {
 import { generateMockForexData, Candlestick } from '@/lib/forex-data-utils';
 import { getExplainableTradeSignals, ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 import { detectCandlestickPatterns } from '@/ai/flows/candlestick-pattern-recognition';
+import { cn } from '@/lib/utils';
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1H', '4H', 'Daily'];
-const MAJOR_PAIRS = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF'];
 
 export default function DashboardPage() {
   const [activePair, setActivePair] = useState('EURUSD');
@@ -150,7 +150,7 @@ export default function DashboardPage() {
                       className={cn("h-8 w-8", indicators.ema && "text-yellow-400 bg-yellow-400/10")}
                       onClick={() => setIndicators(prev => ({ ...prev, ema: !prev.ema }))}
                     >
-                      <Waveform className="h-4 w-4" />
+                      <Waves className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Toggle EMA</TooltipContent>
