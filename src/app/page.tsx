@@ -18,7 +18,10 @@ import {
   Share2,
   ChevronDown,
   Globe,
-  AlertTriangle
+  AlertTriangle,
+  PanelLeft,
+  PanelRight,
+  MessageSquare
 } from 'lucide-react';
 import { 
   Tooltip,
@@ -44,6 +47,11 @@ export default function DashboardPage() {
   const chartRef = useRef<TradingChartHandle>(null);
   const { toast } = useToast();
   
+  // Sidebar Visibility States
+  const [showWatchlist, setShowWatchlist] = useState(true);
+  const [showAnalysisPanel, setShowAnalysisPanel] = useState(true);
+  const [showIndicatorSettings, setShowIndicatorSettings] = useState(false);
+
   // Indicator State
   const [indicators, setIndicators] = useState<IndicatorsState>({
     sma: { enabled: true, period: 20, color: '#3A86FF' },
@@ -51,7 +59,6 @@ export default function DashboardPage() {
     bb: { enabled: false, period: 20, color: '#00F5D4' },
     rsi: { enabled: true, period: 14, color: '#9D4EDD' }
   });
-  const [showIndicatorSettings, setShowIndicatorSettings] = useState(false);
   
   // AI States
   const [signal, setSignal] = useState<ExplainableTradeSignalsOutput | undefined>();
@@ -157,11 +164,24 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden selection:bg-primary/30">
-      <WatchlistSidebar activePair={activePair} onSelectPair={setActivePair} />
+      {showWatchlist && (
+        <WatchlistSidebar activePair={activePair} onSelectPair={setActivePair} />
+      )}
 
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-12 border-b flex items-center justify-between px-4 bg-sidebar/50 backdrop-blur-md z-20">
           <div className="flex items-center gap-4">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={cn("h-8 w-8", showWatchlist ? "text-primary" : "text-muted-foreground")}
+              onClick={() => setShowWatchlist(!showWatchlist)}
+            >
+              <PanelLeft className="h-4 w-4" />
+            </Button>
+
+            <div className="h-4 w-px bg-border/50" />
+
             <div className="flex items-center gap-2 group cursor-pointer hover:bg-muted/50 px-2 py-1 rounded transition-colors">
               <span className="text-sm font-bold tracking-tight">{activePair}</span>
               <ChevronDown className="w-3 h-3 text-muted-foreground group-hover:text-foreground" />
@@ -247,13 +267,30 @@ export default function DashboardPage() {
               {isAnalyzing ? "Analysing" : "Get AI Analysis"}
             </Button>
             
+            <div className="h-4 w-px bg-border/50 mx-2" />
+
             <Button 
               variant="ghost" 
               size="icon" 
-              className={cn("h-8 w-8 text-muted-foreground", showIndicatorSettings && "text-primary bg-primary/10")}
-              onClick={() => setShowIndicatorSettings(!showIndicatorSettings)}
+              className={cn("h-8 w-8", showIndicatorSettings ? "text-primary" : "text-muted-foreground")}
+              onClick={() => {
+                setShowIndicatorSettings(!showIndicatorSettings);
+                if (!showIndicatorSettings) setShowAnalysisPanel(false);
+              }}
             >
               <Settings2 className="w-4 h-4" />
+            </Button>
+
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={cn("h-8 w-8", showAnalysisPanel ? "text-primary" : "text-muted-foreground")}
+              onClick={() => {
+                setShowAnalysisPanel(!showAnalysisPanel);
+                if (!showAnalysisPanel) setShowIndicatorSettings(false);
+              }}
+            >
+              <MessageSquare className="w-4 h-4" />
             </Button>
           </div>
         </header>
@@ -312,13 +349,15 @@ export default function DashboardPage() {
         </footer>
       </main>
 
-      {showIndicatorSettings ? (
+      {showIndicatorSettings && (
         <IndicatorSettingsSidebar 
           indicators={indicators} 
           setIndicators={setIndicators} 
           onClose={() => setShowIndicatorSettings(false)} 
         />
-      ) : (
+      )}
+
+      {showAnalysisPanel && (
         <AnalysisPanel signal={signal} patterns={patterns} isLoading={isAnalyzing} />
       )}
     </div>
