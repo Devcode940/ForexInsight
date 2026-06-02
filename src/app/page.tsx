@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -66,7 +65,9 @@ export default function DashboardPage() {
     sma: { enabled: true, period: 20, color: '#3A86FF' },
     ema: { enabled: false, period: 50, color: '#FFBE0B' },
     bb: { enabled: false, period: 20, color: '#00F5D4' },
-    rsi: { enabled: true, period: 14, color: '#9D4EDD' }
+    rsi: { enabled: true, period: 14, color: '#9D4EDD' },
+    volume: { enabled: true },
+    showPatternLabels: true
   });
   
   // AI States
@@ -228,7 +229,7 @@ export default function DashboardPage() {
   const toggleIndicator = (key: keyof IndicatorsState) => {
     setIndicators(prev => ({
       ...prev,
-      [key]: { ...prev[key], enabled: !prev[key].enabled }
+      [key]: typeof prev[key] === 'object' ? { ...prev[key], enabled: !prev[key].enabled } : !prev[key]
     }));
   };
 

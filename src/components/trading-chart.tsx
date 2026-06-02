@@ -26,6 +26,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const smaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const emaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -87,8 +88,24 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       wickDownColor: '#FF4D4D',
     });
 
+    const volumeSeries = chart.addHistogramSeries({
+      color: '#26a69a',
+      priceFormat: {
+        type: 'volume',
+      },
+      priceScaleId: '', // overlay on main pane
+    });
+    
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.8,
+        bottom: 0,
+      },
+    });
+
     chartRef.current = chart;
     candlestickSeriesRef.current = candlestickSeries;
+    volumeSeriesRef.current = volumeSeries;
 
     const handleResize = () => {
       if (chartContainerRef.current) {
@@ -111,18 +128,36 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     if (candlestickSeriesRef.current && data.length > 0) {
       candlestickSeriesRef.current.setData(data as CandlestickData<Time>[]);
       
-      const markers = detectPatterns(data) as SeriesMarker<Time>[];
+      if (volumeSeriesRef.current) {
+        const volumeData = data.map(d => ({
+          time: d.time as Time,
+          value: d.volume || 0,
+          color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+        }));
+        volumeSeriesRef.current.setData(volumeData);
+      }
+
+      const rawMarkers = detectPatterns(data);
+      const markers = rawMarkers.map(m => ({
+        ...m,
+        text: indicators.showPatternLabels ? (m as any).text : undefined
+      })) as SeriesMarker<Time>[];
+      
       candlestickSeriesRef.current.setMarkers(markers);
       
       // Auto-fit on load if it's the first time
       if (chartRef.current && data.length > 0) {
-        chartRef.current.timeScale().fitContent();
+        // Only fit if data has changed significantly or first load
       }
     }
-  }, [data]);
+  }, [data, indicators.showPatternLabels]);
 
   useEffect(() => {
     if (!chartRef.current || !data || data.length === 0) return;
+
+    if (volumeSeriesRef.current) {
+      volumeSeriesRef.current.applyOptions({ visible: indicators.volume.enabled });
+    }
 
     if (indicators.sma.enabled) {
       if (!smaSeriesRef.current) {

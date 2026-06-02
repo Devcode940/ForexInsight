@@ -62,7 +62,7 @@ export function generateMockForexData(basePrice: number, count: number = 200): C
       high: Number(high.toFixed(5)),
       low: Number(low.toFixed(5)),
       close: Number(close.toFixed(5)),
-      volume: Math.floor(Math.random() * 1000)
+      volume: Math.floor(Math.random() * 10000)
     });
     currentPrice = close;
   }
@@ -156,6 +156,7 @@ export function detectPatterns(data: Candlestick[]) {
         position: 'belowBar',
         color: '#4ade80',
         shape: 'arrowUp',
+        text: 'Bullish Engulfing'
       });
     }
 
@@ -169,6 +170,7 @@ export function detectPatterns(data: Candlestick[]) {
         position: 'aboveBar',
         color: '#f87171',
         shape: 'arrowDown',
+        text: 'Bearish Engulfing'
       });
     }
 
@@ -179,6 +181,7 @@ export function detectPatterns(data: Candlestick[]) {
         position: 'inBar',
         color: '#9ca3af',
         shape: 'circle',
+        text: 'Doji'
       });
     }
 
@@ -189,6 +192,7 @@ export function detectPatterns(data: Candlestick[]) {
         position: 'belowBar',
         color: '#3b82f6',
         shape: 'arrowUp',
+        text: 'Hammer'
       });
     }
 
@@ -199,6 +203,7 @@ export function detectPatterns(data: Candlestick[]) {
         position: 'aboveBar',
         color: '#f59e0b',
         shape: 'arrowDown',
+        text: 'Shooting Star'
       });
     }
   }
