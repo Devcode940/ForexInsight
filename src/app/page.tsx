@@ -15,18 +15,12 @@ import {
   Zap, 
   LineChart,
   RefreshCw,
-  Maximize2,
-  Share2,
   ChevronDown,
-  Globe,
   AlertTriangle,
   PanelLeft,
-  PanelRight,
   MessageSquare,
   Wifi,
-  WifiOff,
-  Menu,
-  X
+  WifiOff
 } from 'lucide-react';
 import { 
   Tooltip,
@@ -34,21 +28,31 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { generateMockForexData, Candlestick, detectPatterns, mapSymbolToFinnhub, mapTimeframeToResolution } from '@/lib/forex-data-utils';
+import { 
+  generateMockForexData, 
+  Candlestick, 
+  detectPatterns, 
+  mapSymbolToFinnhub, 
+  mapTimeframeToResolution, 
+  calculateRSI, 
+  calculateSMA, 
+  calculateEMA, 
+  getMockBasePrice 
+} from '@/lib/forex-data-utils';
 import { getExplainableTradeSignals, ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 import { detectCandlestickPatterns } from '@/ai/flows/candlestick-pattern-recognition';
 import { fetchFinnhubCandles } from '@/app/actions/market-data';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/use-auth';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { saveUserPreferences, getUserPreferences, saveTradeSignal } from '@/lib/firebase/store';
+import { useAuth } from '@/hooks/use-auth';
+import { getUserPreferences, saveUserPreferences, saveTradeSignal } from '@/lib/firebase/store';
 
 const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', 'D', 'W', 'M'];
 
 export default function DashboardPage() {
-  const { user } = useAuth();
   const isMobile = useIsMobile();
+  const { user } = useAuth();
   const [activePair, setActivePair] = useState('XAUUSD');
   const [activeTimeframe, setActiveTimeframe] = useState('1H');
   const [customAiInstructions, setCustomAiInstructions] = useState('');
@@ -56,6 +60,8 @@ export default function DashboardPage() {
   const [isRealData, setIsRealData] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  
   const chartRef = useRef<TradingChartHandle>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const { toast } = useToast();
@@ -92,9 +98,10 @@ export default function DashboardPage() {
     }
   }, [isMobile]);
 
-  // Sync with Firestore when logged in
+  // Load User Preferences from Firestore
   useEffect(() => {
     if (user) {
+      setIsInitialLoad(true);
       getUserPreferences(user.uid).then(prefs => {
         if (prefs) {
           if (prefs.activePair) setActivePair(prefs.activePair);
@@ -102,25 +109,28 @@ export default function DashboardPage() {
           if (prefs.indicators) setIndicators(prefs.indicators);
           if (prefs.customAiInstructions) setCustomAiInstructions(prefs.customAiInstructions);
         }
+        // Mark initial load complete after state updates
+        setTimeout(() => setIsInitialLoad(false), 200);
       });
     }
   }, [user]);
 
-  // Persist changes to Firestore
+  // Save User Preferences to Firestore (Avoid initial load write)
   useEffect(() => {
-    if (user) {
+    if (user && !isInitialLoad) {
       saveUserPreferences(user.uid, {
         activePair,
         activeTimeframe,
-        indicators
+        indicators,
+        customAiInstructions
       });
     }
-  }, [user, activePair, activeTimeframe, indicators]);
+  }, [user, activePair, activeTimeframe, indicators, customAiInstructions, isInitialLoad]);
 
   const loadMarketData = async () => {
     const apiKey = localStorage.getItem('finnhub_api_key');
     if (!apiKey) {
-      const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
+      const mockData = generateMockForexData(getMockBasePrice(activePair), 150);
       setData(mockData);
       setIsRealData(false);
       return;
@@ -136,13 +146,14 @@ export default function DashboardPage() {
         setData(realData);
         setIsRealData(true);
       } else {
-        const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
+        const mockData = generateMockForexData(getMockBasePrice(activePair), 150);
         setData(mockData);
         setIsRealData(false);
       }
     } catch (error) {
-      const mockData = generateMockForexData(activePair === 'USDJPY' ? 149.20 : 1.0820, 150);
+      const mockData = generateMockForexData(getMockBasePrice(activePair), 150);
       setData(mockData);
+      setIsRealData(false);
     } finally {
       setIsLoadingData(false);
     }
@@ -182,7 +193,11 @@ export default function DashboardPage() {
     socket.onerror = () => setSocketConnected(false);
 
     return () => {
-      if (socketRef.current) socketRef.current.close();
+      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+        const finnSymbol = mapSymbolToFinnhub(activePair);
+        socketRef.current.send(JSON.stringify({ type: 'unsubscribe', symbol: finnSymbol }));
+        socketRef.current.close();
+      }
     };
   }, [activePair, isRealData]);
 
@@ -201,12 +216,24 @@ export default function DashboardPage() {
     }
     
     setIsAnalyzing(true);
-    if (isMobile) setShowAnalysisPanel(true); // Auto-open panel on mobile
+    if (isMobile) setShowAnalysisPanel(true);
 
     try {
       const recentCandles = data.slice(-100); 
       const localPatterns = detectPatterns(recentCandles);
       const patternNames = Array.from(new Set(localPatterns.map(p => p.text)));
+
+      // Calculate actual technical indicators from the same data set
+      const rsiData = calculateRSI(recentCandles, indicators.rsi.period);
+      const currentRsi = rsiData.length > 0 ? rsiData[rsiData.length - 1].value : null;
+
+      const smaData = calculateSMA(recentCandles, indicators.sma.period);
+      const currentSma = smaData.length > 0 ? smaData[smaData.length - 1].value : null;
+
+      const emaData = indicators.ema.enabled 
+        ? calculateEMA(recentCandles, indicators.ema.period) 
+        : null;
+      const currentEma = emaData && emaData.length > 0 ? emaData[emaData.length - 1].value : null;
 
       const result = await getExplainableTradeSignals({
         currencyPair: activePair,
@@ -219,14 +246,16 @@ export default function DashboardPage() {
           timestamp: Number(c.time) * 1000
         })),
         indicators: {
-          rsi: 62.5, 
-          sma: recentCandles[recentCandles.length - 1].close * 0.998,
+          rsi: currentRsi ?? undefined,
+          sma: currentSma ?? undefined,
+          ema: currentEma ?? undefined,
         },
         detectedPatterns: patternNames,
         customInstructions: customAiInstructions
       });
       setSignal(result);
 
+      // Save signal to history if authenticated
       if (user) {
         await saveTradeSignal(user.uid, result, activePair, activeTimeframe);
       }
@@ -241,9 +270,10 @@ export default function DashboardPage() {
       setPatterns(patternResult.patterns);
 
     } catch (error) {
+      console.error('AI Analysis Error:', error);
       toast({
         title: "Analysis Failed",
-        description: "Could not complete AI analysis.",
+        description: error instanceof Error ? error.message : "Could not complete AI analysis.",
         variant: "destructive"
       });
     } finally {
@@ -449,7 +479,7 @@ export default function DashboardPage() {
             <div className="h-3 w-px bg-border/50 shrink-0 hidden sm:block" />
             <div className="flex items-center gap-2 text-destructive/80 italic overflow-hidden">
               <AlertTriangle className="w-3 h-3 shrink-0" />
-              <span className="truncate">Disclaimer: AI signals are not financial advice.</span>
+              <span className="truncate">Disclaimer: Algorithmic signals are for reference only, not financial advice.</span>
             </div>
           </div>
           <div className="hidden md:flex items-center gap-4 font-mono ml-4 shrink-0">
@@ -468,6 +498,8 @@ export default function DashboardPage() {
           <IndicatorSettingsSidebar 
             indicators={indicators} 
             setIndicators={setIndicators} 
+            customAiInstructions={customAiInstructions}
+            setCustomAiInstructions={setCustomAiInstructions}
             onClose={() => setShowIndicatorSettings(false)} 
           />
         )}
@@ -484,4 +516,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

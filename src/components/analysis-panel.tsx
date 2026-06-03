@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { 
   BrainCircuit, 
@@ -14,23 +14,13 @@ import {
   Scale,
   CheckCircle2,
   AlertTriangle,
-  History,
   TrendingUp,
   TrendingDown,
-  Calendar,
   X
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from '@/lib/utils';
 import { ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
-import { getSignalHistory, StoredSignal } from '@/lib/firebase/store';
-import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -42,19 +32,9 @@ interface AnalysisPanelProps {
 }
 
 export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns = [], isLoading, onClose }) => {
-  const { user } = useAuth();
   const isMobile = useIsMobile();
-  const [view, setView] = useState<'current' | 'history'>('current');
-  const [history, setHistory] = useState<StoredSignal[]>([]);
-  const [selectedHistory, setSelectedHistory] = useState<StoredSignal | null>(null);
 
-  useEffect(() => {
-    if (view === 'history' && user) {
-      getSignalHistory(user.uid).then(setHistory);
-    }
-  }, [view, user]);
-
-  const activeSignal = view === 'history' ? selectedHistory : signal;
+  const activeSignal = signal;
 
   return (
     <div className="w-full h-full border-l bg-sidebar flex flex-col overflow-hidden">
@@ -64,22 +44,6 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
           <h2 className="text-sm font-bold tracking-tight uppercase">AI Confluence</h2>
         </div>
         <div className="flex gap-1 items-center">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className={cn("h-7 w-7", view === 'current' ? "text-primary" : "text-muted-foreground")}
-            onClick={() => setView('current')}
-          >
-            <Zap className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className={cn("h-7 w-7", view === 'history' ? "text-primary" : "text-muted-foreground")}
-            onClick={() => setView('history')}
-          >
-            <History className="h-4 w-4" />
-          </Button>
           {isMobile && onClose && (
             <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7 ml-1">
               <X className="w-4 h-4" />
@@ -89,42 +53,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
       </div>
 
       <ScrollArea className="flex-1">
-        {view === 'history' && !selectedHistory ? (
-          <div className="p-4 space-y-3">
-            <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">Past Analysis</h3>
-            {history.length > 0 ? history.map((h, i) => (
-              <div 
-                key={i} 
-                onClick={() => setSelectedHistory(h)}
-                className="p-3 rounded-lg border border-border/50 bg-muted/10 hover:bg-muted/20 cursor-pointer transition-colors"
-              >
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold">{h.currencyPair}</span>
-                  <Badge className={cn("text-[8px] px-1 py-0", h.direction === 'Bullish' ? "bg-green-500" : "bg-red-500")}>
-                    {h.direction}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-2 text-[9px] text-muted-foreground font-mono">
-                  <Calendar className="w-3 h-3" />
-                  {new Date(h.createdAt).toLocaleString()}
-                </div>
-              </div>
-            )) : (
-              <p className="text-xs text-center text-muted-foreground py-10 italic">No history found.</p>
-            )}
-          </div>
-        ) : (
-          <div className="p-4 space-y-6">
-            {view === 'history' && selectedHistory && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-7 text-[10px] font-bold uppercase"
-                onClick={() => setSelectedHistory(null)}
-              >
-                ← Back to History
-              </Button>
-            )}
+        <div className="p-4 space-y-6">
 
             {/* Signal Header */}
             <section>
@@ -217,36 +146,33 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
               )}
             </section>
 
-            {view === 'current' && (
-              <section>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-1.5">
-                    <Stethoscope className="w-3.5 h-3.5 text-accent" />
-                    <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Rule-Based Patterns</h3>
-                  </div>
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-1.5">
+                  <Stethoscope className="w-3.5 h-3.5 text-accent" />
+                  <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Rule-Based Patterns</h3>
                 </div>
-                
-                <div className="space-y-2">
-                  {patterns.length > 0 ? (
-                    patterns.map((p, idx) => (
-                      <div key={idx} className="p-3 rounded-lg bg-muted/20 border border-border/30 group hover:border-accent/50 transition-all cursor-default">
-                        <div className="flex justify-between items-start mb-1.5">
-                          <span className="text-xs font-bold">{p.patternName}</span>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground leading-normal group-hover:text-foreground transition-colors">{p.explanation}</p>
+              </div>
+              
+              <div className="space-y-2">
+                {patterns.length > 0 ? (
+                  patterns.map((p, idx) => (
+                    <div key={idx} className="p-3 rounded-lg bg-muted/20 border border-border/30 group hover:border-accent/50 transition-all cursor-default">
+                      <div className="flex justify-between items-start mb-1.5">
+                        <span className="text-xs font-bold">{p.patternName}</span>
                       </div>
-                    ))
-                  ) : (
-                    <div className="py-6 text-center border border-dashed rounded-lg bg-muted/5 opacity-60">
-                      <AlertCircle className="w-4 h-4 mx-auto mb-2 text-muted-foreground/30" />
-                      <p className="text-[10px] text-muted-foreground">Scanning for structural patterns...</p>
+                      <p className="text-[10px] text-muted-foreground leading-normal group-hover:text-foreground transition-colors">{p.explanation}</p>
                     </div>
-                  )}
-                </div>
-              </section>
-            )}
+                  ))
+                ) : (
+                  <div className="py-6 text-center border border-dashed rounded-lg bg-muted/5 opacity-60">
+                    <AlertCircle className="w-4 h-4 mx-auto mb-2 text-muted-foreground/30" />
+                    <p className="text-[10px] text-muted-foreground">Scanning for structural patterns...</p>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
-        )}
       </ScrollArea>
     </div>
   );

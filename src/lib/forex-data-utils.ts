@@ -8,6 +8,54 @@ export interface Candlestick {
 }
 
 /**
+ * Realistic base prices for different trading instruments
+ */
+const BASE_PRICES: Record<string, number> = {
+  // Major Currency Pairs
+  'EURUSD': 1.0820,
+  'GBPUSD': 1.2650,
+  'USDJPY': 149.20,
+  'USDCHF': 0.8850,
+  'AUDUSD': 0.6520,
+  'USDCAD': 1.3580,
+  'NZDUSD': 0.6120,
+  
+  // Precious Metals
+  'XAUUSD': 2350.00,  // Gold
+  'XAGUSD': 28.50,     // Silver
+  
+  // Cross Pairs
+  'EURJPY': 161.50,
+  'GBPJPY': 188.70,
+  'EURGBP': 0.8550,
+  'AUDJPY': 97.30,
+  'EURAUD': 1.6550,
+  'EURCHF': 0.9580,
+  'GBPAUD': 1.9350,
+  'GBPCHF': 1.1200,
+  
+  // Default fallback
+  'DEFAULT': 1.0000
+};
+
+/**
+ * Get realistic base price for a given trading pair
+ */
+export function getMockBasePrice(pair: string): number {
+  return BASE_PRICES[pair] || BASE_PRICES['DEFAULT'];
+}
+
+/**
+ * Determine instrument type for volume calculations
+ */
+function getInstrumentType(pair: string): 'forex' | 'metal' {
+  if (pair.startsWith('XAU') || pair.startsWith('XAG')) {
+    return 'metal';
+  }
+  return 'forex';
+}
+
+/**
  * Maps dashboard symbols to Finnhub/OANDA format
  */
 export function mapSymbolToFinnhub(pair: string): string {
@@ -48,6 +96,10 @@ export function generateMockForexData(basePrice: number, count: number = 200): C
   let currentPrice = basePrice;
   const now = new Date();
   
+  // Determine appropriate volume scale based on instrument type
+  const isMetal = basePrice > 1000 || basePrice < 50; // Simple heuristic for Gold/Silver
+  const baseVolume = isMetal ? 50000 : 1000000;
+  
   for (let i = 0; i < count; i++) {
     const time = new Date(now.getTime() - (count - i) * 3600000); // 1h intervals
     const volatility = basePrice * 0.005;
@@ -56,13 +108,17 @@ export function generateMockForexData(basePrice: number, count: number = 200): C
     const high = Math.max(open, close) + Math.random() * volatility * 0.5;
     const low = Math.min(open, close) - Math.random() * volatility * 0.5;
     
+    // Generate realistic volume with variation (50% to 150% of base)
+    const volumeVariation = 0.5 + Math.random();
+    const volume = Math.floor(baseVolume * volumeVariation);
+    
     data.push({
       time: time.getTime() / 1000,
       open: Number(open.toFixed(5)),
       high: Number(high.toFixed(5)),
       low: Number(low.toFixed(5)),
       close: Number(close.toFixed(5)),
-      volume: Math.floor(Math.random() * 10000)
+      volume
     });
     currentPrice = close;
   }
@@ -72,6 +128,7 @@ export function generateMockForexData(basePrice: number, count: number = 200): C
 
 export function calculateSMA(data: Candlestick[], period: number) {
   const sma: { time: string | number; value: number }[] = [];
+  if (data.length < period) return sma;
   for (let i = period - 1; i < data.length; i++) {
     const sum = data.slice(i - period + 1, i + 1).reduce((acc, val) => acc + val.close, 0);
     sma.push({

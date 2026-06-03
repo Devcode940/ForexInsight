@@ -15,9 +15,7 @@ import {
   X, 
   Key, 
   Globe, 
-  ShieldCheck, 
   BarChart3, 
-  Binary, 
   RotateCcw,
   BrainCircuit,
   Sparkles
@@ -25,8 +23,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useAuth } from '@/hooks/use-auth';
-import { saveUserPreferences, getUserPreferences } from '@/lib/firebase/store';
 
 export interface IndicatorConfig {
   enabled: boolean;
@@ -46,40 +42,28 @@ export interface IndicatorsState {
 interface IndicatorSettingsSidebarProps {
   indicators: IndicatorsState;
   setIndicators: React.Dispatch<React.SetStateAction<IndicatorsState>>;
+  customAiInstructions: string;
+  setCustomAiInstructions: (val: string) => void;
   onClose: () => void;
 }
 
 export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> = ({ 
   indicators, 
   setIndicators,
+  customAiInstructions,
+  setCustomAiInstructions,
   onClose
 }) => {
-  const { user } = useAuth();
   const [apiKey, setApiKey] = useState('');
-  const [customAiInstructions, setCustomAiInstructions] = useState('');
 
   useEffect(() => {
     const saved = localStorage.getItem('finnhub_api_key');
     if (saved) setApiKey(saved);
-
-    if (user) {
-      getUserPreferences(user.uid).then(prefs => {
-        if (prefs?.customAiInstructions) {
-          setCustomAiInstructions(prefs.customAiInstructions);
-        }
-      });
-    }
-  }, [user]);
+  }, []);
 
   const saveKey = () => {
     localStorage.setItem('finnhub_api_key', apiKey);
     window.location.reload();
-  };
-
-  const saveAiConfig = async () => {
-    if (user) {
-      await saveUserPreferences(user.uid, { customAiInstructions });
-    }
   };
 
   const updateIndicator = (key: keyof IndicatorsState, updates: any) => {
@@ -160,15 +144,10 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
                   placeholder="e.g. Focus on 5m scalping strategies using RSI and Price Action..." 
                   className="min-h-[100px] text-xs bg-background resize-none"
                 />
-                <Button 
-                  size="sm" 
-                  onClick={saveAiConfig} 
-                  variant="outline"
-                  className="w-full h-8 font-bold uppercase text-[9px] gap-2"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  Save AI Config
-                </Button>
+                <div className="flex items-center gap-2 py-1">
+                   <Sparkles className="w-3 h-3 text-accent" />
+                   <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-tight">Saved to cloud automatically</span>
+                </div>
               </div>
             </div>
           </section>

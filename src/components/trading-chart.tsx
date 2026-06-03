@@ -10,7 +10,7 @@ import {
   Time,
   SeriesMarker
 } from 'lightweight-charts';
-import { Candlestick, detectPatterns } from '@/lib/forex-data-utils';
+import { Candlestick, detectPatterns, calculateRSI, calculateSMA, calculateEMA } from '@/lib/forex-data-utils';
 import { IndicatorsState } from '@/components/indicator-settings-sidebar';
 
 interface TradingChartProps {
@@ -162,13 +162,10 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       } else {
         smaSeriesRef.current.applyOptions({ title: `SMA ${indicators.sma.period}`, color: indicators.sma.color });
       }
-      const period = indicators.sma.period;
-      const smaData = data.map((d, i) => {
-        if (i < period) return null;
-        const slice = data.slice(i - period + 1, i + 1);
-        const avg = slice.reduce((sum, item) => sum + item.close, 0) / period;
-        return { time: d.time as Time, value: avg };
-      }).filter((item): item is { time: Time; value: number } => item !== null);
+      const smaData = calculateSMA(data, indicators.sma.period).map(d => ({
+        time: d.time as Time,
+        value: d.value
+      }));
       smaSeriesRef.current.setData(smaData);
     } else if (smaSeriesRef.current) {
       chartRef.current.removeSeries(smaSeriesRef.current);
@@ -186,14 +183,10 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       } else {
         emaSeriesRef.current.applyOptions({ title: `EMA ${indicators.ema.period}`, color: indicators.ema.color });
       }
-      const period = indicators.ema.period;
-      const k = 2 / (period + 1);
-      let emaValue = data[0].close;
-      const emaData = data.map((d, i) => {
-        if (i === 0) emaValue = d.close;
-        else emaValue = (d.close - emaValue) * k + emaValue;
-        return { time: d.time as Time, value: emaValue };
-      });
+      const emaData = calculateEMA(data, indicators.ema.period).map(d => ({
+        time: d.time as Time,
+        value: d.value
+      }));
       emaSeriesRef.current.setData(emaData);
     } else if (emaSeriesRef.current) {
       chartRef.current.removeSeries(emaSeriesRef.current);
@@ -212,7 +205,6 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
           scaleMargins: { top: 0.8, bottom: 0.05 },
         });
       }
-      const { calculateRSI } = require('@/lib/forex-data-utils');
       const rsiData = calculateRSI(data, indicators.rsi.period);
       rsiSeriesRef.current.setData(rsiData);
     } else if (rsiSeriesRef.current) {
