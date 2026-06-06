@@ -16,16 +16,18 @@ import {
   AlertTriangle,
   TrendingUp,
   TrendingDown,
-  X
+  X,
+  Eye
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface AnalysisPanelProps {
-  signal?: ExplainableTradeSignalsOutput;
+  signal?: ExplainableTradeSignalsOutput & { analyzedCandleCount?: number };
   patterns?: any[];
   isLoading?: boolean;
   onClose?: () => void;
@@ -33,8 +35,6 @@ interface AnalysisPanelProps {
 
 export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns = [], isLoading, onClose }) => {
   const isMobile = useIsMobile();
-
-  const activeSignal = signal;
 
   return (
     <div className="w-full h-full border-l bg-sidebar flex flex-col overflow-hidden">
@@ -57,9 +57,24 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
 
             {/* Signal Header */}
             <section>
-              <div className="flex items-center gap-1.5 mb-3">
-                <Zap className="w-3.5 h-3.5 text-primary" />
-                <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Trade Probability</h3>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-primary" />
+                  <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Trade Probability</h3>
+                </div>
+                {signal?.analyzedCandleCount && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground/60 uppercase">
+                          <Eye className="w-2.5 h-2.5" />
+                          <span>{signal.analyzedCandleCount} candles</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="left">Analyzed visible range selection</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
               </div>
               
               {isLoading ? (
@@ -67,27 +82,27 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
                   <div className="h-32 bg-muted/40 rounded-xl" />
                   <div className="h-24 bg-muted/40 rounded-xl" />
                 </div>
-              ) : activeSignal ? (
+              ) : signal ? (
                 <div className="space-y-4">
                   <div className={cn(
                     "p-4 rounded-xl border border-border/50 shadow-sm",
-                    activeSignal.direction === 'Bullish' ? "bg-green-500/5 border-green-500/20" : 
-                    activeSignal.direction === 'Bearish' ? "bg-red-500/5 border-red-500/20" : "bg-muted/10"
+                    signal.direction === 'Bullish' ? "bg-green-500/5 border-green-500/20" : 
+                    signal.direction === 'Bearish' ? "bg-red-500/5 border-red-500/20" : "bg-muted/10"
                   )}>
                     <div className="flex justify-between items-start mb-4">
                       <Badge className={cn(
                         "text-[10px] font-bold px-2 py-0.5",
-                        activeSignal.direction === 'Bullish' ? "bg-green-500 text-white" : 
-                        activeSignal.direction === 'Bearish' ? "bg-red-500 text-white" : "bg-muted text-muted-foreground"
+                        signal.direction === 'Bullish' ? "bg-green-500 text-white" : 
+                        signal.direction === 'Bearish' ? "bg-red-500 text-white" : "bg-muted text-muted-foreground"
                       )}>
-                        {activeSignal.direction.toUpperCase()}
+                        {signal.direction.toUpperCase()}
                       </Badge>
                       <div className="text-right">
                         <span className="text-[9px] font-bold text-muted-foreground uppercase block">Confidence</span>
                         <span className={cn(
                           "text-sm font-mono font-bold",
-                          activeSignal.confidence > 7 ? "text-primary" : "text-muted-foreground"
-                        )}>{activeSignal.confidence}/10</span>
+                          signal.confidence > 7 ? "text-primary" : "text-muted-foreground"
+                        )}>{signal.confidence}/10</span>
                       </div>
                     </div>
                     
@@ -96,29 +111,29 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
                         <span className="text-[8px] font-bold text-muted-foreground uppercase flex items-center gap-1">
                           <Target className="w-2.5 h-2.5" /> Entry
                         </span>
-                        <p className="text-[10px] font-bold font-mono text-foreground mt-0.5">{activeSignal.entryZone}</p>
+                        <p className="text-[10px] font-bold font-mono text-foreground mt-0.5">{signal.entryZone}</p>
                       </div>
                       <div className="p-2 rounded bg-muted/20 border border-border/30">
                         <span className="text-[8px] font-bold text-muted-foreground uppercase flex items-center gap-1">
                           <Scale className="w-2.5 h-2.5" /> RR Ratio
                         </span>
-                        <p className="text-[10px] font-bold font-mono text-primary mt-0.5">{activeSignal.riskRewardRatio}</p>
+                        <p className="text-[10px] font-bold font-mono text-primary mt-0.5">{signal.riskRewardRatio}</p>
                       </div>
                       <div className="p-2 rounded bg-muted/20 border border-border/30">
                         <span className="text-[8px] font-bold text-muted-foreground uppercase">Stop Loss</span>
-                        <p className="text-[10px] font-bold font-mono text-red-400 mt-0.5">{activeSignal.stopLoss}</p>
+                        <p className="text-[10px] font-bold font-mono text-red-400 mt-0.5">{signal.stopLoss}</p>
                       </div>
                       <div className="p-2 rounded bg-muted/20 border border-border/30">
                         <span className="text-[8px] font-bold text-muted-foreground uppercase">Take Profit</span>
-                        <p className="text-[10px] font-bold font-mono text-green-400 mt-0.5">{activeSignal.takeProfit}</p>
+                        <p className="text-[10px] font-bold font-mono text-green-400 mt-0.5">{signal.takeProfit}</p>
                       </div>
                     </div>
 
-                    {activeSignal.confluenceFactors && activeSignal.confluenceFactors.length > 0 && (
+                    {signal.confluenceFactors && signal.confluenceFactors.length > 0 && (
                       <div className="mb-4">
                         <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest block mb-1.5">Alignment Factors</span>
                         <div className="flex flex-wrap gap-1">
-                          {activeSignal.confluenceFactors.map((f, i) => (
+                          {signal.confluenceFactors.map((f, i) => (
                             <div key={i} className="flex items-center gap-1 bg-primary/10 text-primary text-[8px] font-bold px-1.5 py-0.5 rounded border border-primary/20">
                               <CheckCircle2 className="w-2 h-2" />
                               {f}
@@ -134,14 +149,14 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
                         <span className="text-[9px] font-bold uppercase tracking-wider">Logic Analysis</span>
                       </div>
                       <p className="text-xs leading-relaxed text-foreground/80 font-medium italic">
-                        "{activeSignal.reasoning}"
+                        "{signal.reasoning}"
                       </p>
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="py-8 text-center border border-dashed rounded-xl bg-muted/5">
-                  <p className="text-xs text-muted-foreground px-4">Ready for deep analysis. Select an asset and timeframe to generate a high-confluence report.</p>
+                  <p className="text-xs text-muted-foreground px-4">Ready for analysis. Zoom into a specific chart segment and hit AI Analysis to evaluate that range.</p>
                 </div>
               )}
             </section>

@@ -2,7 +2,7 @@
 
 AI-powered forex trading dashboard with real-time market data, technical indicator analysis, and AI-driven trade signal generation using Google Gemini 2.5 Flash.
 
-Built with [Next.js 15](https://nextjs.org/) (App Router), [Firebase](https://firebase.google.com/) (Auth + Firestore), [Genkit](https://firebase.google.com/docs/genkit) (AI orchestration), and [TradingView Lightweight Charts](https://www.tradingview.com/lightweight-charts/).
+Built with [Next.js 15](https://nextjs.org/) (App Router), [Supabase](https://supabase.com/) (Auth + Database), [Genkit](https://firebase.google.com/docs/genkit) (AI orchestration), and [TradingView Lightweight Charts](https://www.tradingview.com/lightweight-charts/).
 
 ---
 
@@ -13,8 +13,8 @@ Built with [Next.js 15](https://nextjs.org/) (App Router), [Firebase](https://fi
 - **AI trade signals** — Two Genkit-powered AI analysis flows:
   - *Explainable Trade Signals* — Confluence-based trade recommendations with entry, stop-loss, take-profit, and risk/reward ratio
   - *Candlestick Pattern Recognition* — Identifies patterns (Engulfing, Doji, Hammer, Morning/Evening Star, etc.)
-- **User accounts** — Google Sign-In via Firebase Authentication
-- **Cloud persistence** — User preferences (active pair, timeframe, indicator settings, custom AI instructions) saved to Firestore
+- **User accounts** — Google Sign-In via Supabase Authentication
+- **Cloud persistence** — User preferences (active pair, timeframe, indicator settings, custom AI instructions) saved to Supabase database
 - **Signal history** — Past AI analyses stored and browsable
 - **Professional UI** — Dark mode, responsive layout with collapsible sidebars, built with shadcn/ui
 
@@ -29,8 +29,8 @@ Built with [Next.js 15](https://nextjs.org/) (App Router), [Firebase](https://fi
 | **UI** | React 19, Tailwind CSS, shadcn/ui (Radix primitives + Lucide icons) |
 | **Charts** | TradingView Lightweight Charts 4.2.1 |
 | **AI / LLM** | Genkit 1.28 + Google Generative AI (Gemini 2.5 Flash) |
-| **Auth** | Firebase Authentication (Google provider) |
-| **Database** | Cloud Firestore |
+| **Auth** | Supabase Authentication (Google OAuth provider) |
+| **Database** | Supabase (PostgreSQL) |
 | **Market Data** | Finnhub REST API + WebSocket |
 | **Forms** | react-hook-form + zod validation |
 
@@ -43,24 +43,27 @@ Built with [Next.js 15](https://nextjs.org/) (App Router), [Firebase](https://fi
 - Node.js 20+
 - npm
 - A Finnhub API key (free tier at [finnhub.io](https://finnhub.io/))
-- A Firebase project with Authentication (Google provider) and Firestore enabled
+- A Supabase project with Authentication (Google provider) enabled
 - A Google AI API key ([ai.google.dev](https://ai.google.dev/))
 
 ### Environment Variables
 
-Create a `.env` file in the project root:
+Create a `.env.local` file in the project root:
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key
-NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.firebasestorage.app
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-> ⚠️ `.env` files are gitignored for security. Never commit credentials.
+> ⚠️ `.env.local` files are gitignored for security. Never commit credentials.
+
+#### Setting up Supabase
+
+1. Create a new project at [supabase.com](https://supabase.com/)
+2. Enable Google OAuth provider in Authentication > Providers
+3. Run the migration in `supabase/migrations/00001_initial_schema.sql` to create the required tables
+4. Copy your project URL and anon key from Settings > API
 
 ### Installation
 
@@ -107,8 +110,9 @@ src/
 ├── app/                       # Next.js App Router pages
 │   ├── actions/
 │   │   └── market-data.ts     # Server actions for market data
-│   ├── login/
-│   │   └── page.tsx           # Login page (Google Sign-In)
+│   ├── auth/
+│   │   └── callback/
+│   │       └── page.tsx       # OAuth callback handler
 │   ├── globals.css            # Global styles and CSS variables
 │   ├── layout.tsx             # Root layout (dark mode, fonts)
 │   └── page.tsx               # Main trading dashboard
@@ -120,14 +124,14 @@ src/
 │   ├── watchlist-sidebar.tsx       # Currency pair watchlist
 │   └── ui/                         # shadcn/ui components (35 primitives)
 ├── hooks/
-│   ├── use-auth.ts             # Firebase auth state hook
+│   ├── use-auth.ts             # Supabase auth state hook
 │   ├── use-mobile.tsx          # Responsive breakpoint hook
 │   └── use-toast.ts            # Toast notification hook
 └── lib/
-    ├── firebase/
-    │   ├── config.ts           # Firebase app initialization
+    ├── supabase/
+    │   ├── config.ts           # Supabase client initialization
     │   ├── auth.ts             # Auth helpers (signInWithGoogle, logOut)
-    │   └── store.ts            # Firestore CRUD operations
+    │   └── store.ts            # Database CRUD operations
     ├── forex-data-utils.ts     # Indicator calculations & mock data
     └── utils.ts                # Tailwind class merge utility
 ```
@@ -143,30 +147,17 @@ src/
 3. **AI Analysis** — Two Genkit flows run as Next.js server actions using Gemini 2.5 Flash:
    - `getExplainableTradeSignals` — Analyzes candles + indicators + patterns + optional user instructions, returns a structured trade recommendation
    - `detectCandlestickPatterns` — Analyzes raw candle data to identify candlestick patterns
-4. **Persistence** — Authenticated users have preferences saved to Firestore. Trade signals are stored in a `signals` collection for history browsing.
+4. **Persistence** — Authenticated users have preferences saved to Supabase database. Trade signals are stored in a `signals` table for history browsing.
 
 ### Authentication
 
-Google Sign-In via Firebase popup. Auth state is managed by the `use-auth` hook, which wraps `onAuthStateChanged`. The root layout is an unprotected server component; `page.tsx` and UI components guard functionality based on `user` state.
+Google Sign-In via Supabase OAuth. Auth state is managed by the `use-auth` hook, which wraps Supabase's `onAuthStateChange`. The root layout is an unprotected server component; `page.tsx` and UI components guard functionality based on `user` state.
+
+After successful authentication, users are redirected through `/auth/callback` which exchanges the OAuth code for a session before returning to the dashboard.
 
 ---
 
 ## Deployment
-
-### Firebase App Hosting
-
-The project includes an `apphosting.yaml` configuration for Firebase App Hosting:
-
-```yaml
-runConfig:
-  maxInstances: 1
-```
-
-Deploy via the Firebase console or CLI:
-
-```bash
-firebase deploy --only hosting
-```
 
 ### Build
 

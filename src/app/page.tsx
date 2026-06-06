@@ -20,7 +20,8 @@ import {
   PanelLeft,
   MessageSquare,
   Wifi,
-  WifiOff
+  WifiOff,
+  Eye
 } from 'lucide-react';
 import { 
   Tooltip,
@@ -46,7 +47,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
-import { getUserPreferences, saveUserPreferences, saveTradeSignal } from '@/lib/firebase/store';
+import { getUserPreferences, saveUserPreferences, saveTradeSignal } from '@/lib/supabase/store';
 
 const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', 'D', 'W', 'M'];
 
@@ -82,7 +83,7 @@ export default function DashboardPage() {
   });
   
   // AI States
-  const [signal, setSignal] = useState<ExplainableTradeSignalsOutput | undefined>();
+  const [signal, setSignal] = useState<ExplainableTradeSignalsOutput & { analyzedCandleCount?: number } | undefined>();
   const [patterns, setPatterns] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -102,23 +103,22 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user) {
       setIsInitialLoad(true);
-      getUserPreferences(user.uid).then(prefs => {
+      getUserPreferences(user.id).then(prefs => {
         if (prefs) {
           if (prefs.activePair) setActivePair(prefs.activePair);
           if (prefs.activeTimeframe) setActiveTimeframe(prefs.activeTimeframe);
           if (prefs.indicators) setIndicators(prefs.indicators);
           if (prefs.customAiInstructions) setCustomAiInstructions(prefs.customAiInstructions);
         }
-        // Mark initial load complete after state updates
         setTimeout(() => setIsInitialLoad(false), 200);
       });
     }
   }, [user]);
 
-  // Save User Preferences to Firestore (Avoid initial load write)
+  // Save User Preferences
   useEffect(() => {
     if (user && !isInitialLoad) {
-      saveUserPreferences(user.uid, {
+      saveUserPreferences(user.id, {
         activePair,
         activeTimeframe,
         indicators,
@@ -206,10 +206,18 @@ export default function DashboardPage() {
   }, [activePair, activeTimeframe]);
 
   const runAnalysis = async () => {
-    if (data.length < 50) {
+    // Get visible data from chart for custom selection
+    let recentCandles = chartRef.current?.getVisibleData() || [];
+    
+    // If no selection or too small, fallback to last 100
+    if (recentCandles.length < 10) {
+      recentCandles = data.slice(-100);
+    }
+
+    if (recentCandles.length < 10) {
       toast({
         title: "Insufficient Data",
-        description: "AI analysis requires at least 50 candles.",
+        description: "AI analysis requires at least 10 candles. Please zoom out or load more data.",
         variant: "destructive"
       });
       return;
@@ -219,11 +227,9 @@ export default function DashboardPage() {
     if (isMobile) setShowAnalysisPanel(true);
 
     try {
-      const recentCandles = data.slice(-100); 
       const localPatterns = detectPatterns(recentCandles);
       const patternNames = Array.from(new Set(localPatterns.map(p => p.text)));
 
-      // Calculate actual technical indicators from the same data set
       const rsiData = calculateRSI(recentCandles, indicators.rsi.period);
       const currentRsi = rsiData.length > 0 ? rsiData[rsiData.length - 1].value : null;
 
@@ -253,19 +259,22 @@ export default function DashboardPage() {
         detectedPatterns: patternNames,
         customInstructions: customAiInstructions
       });
-      setSignal(result);
+      
+      setSignal({
+        ...result,
+        analyzedCandleCount: recentCandles.length
+      });
 
-      // Save signal to history if authenticated
       if (user) {
-        await saveTradeSignal(user.uid, result, activePair, activeTimeframe);
+        await saveTradeSignal(user.id, result, activePair, activeTimeframe);
       }
 
       const patternResult = await detectCandlestickPatterns({
-        candles: data.slice(-20).map(c => ({
+        candles: recentCandles.slice(-20).map(c => ({
           ...c,
           time: new Date(Number(c.time) * 1000).toISOString()
         })),
-        marketContext: `Market behavior on ${activePair} ${activeTimeframe}`
+        marketContext: `Focusing on the selected chart segment of ${activePair} ${activeTimeframe}`
       });
       setPatterns(patternResult.patterns);
 
@@ -296,7 +305,6 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden selection:bg-primary/30 relative">
-      {/* Mobile Backdrops */}
       {isMobile && (showWatchlist || showAnalysisPanel || showIndicatorSettings) && (
         <div 
           className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 animate-in fade-in duration-200" 
@@ -304,7 +312,6 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Watchlist Sidebar */}
       <aside className={cn(
         "z-40 transition-all duration-300 ease-in-out",
         isMobile ? "fixed inset-y-0 left-0 shadow-2xl" : "relative border-r shrink-0",
@@ -347,8 +354,6 @@ export default function DashboardPage() {
               <ChevronDown className="w-3 h-3 text-muted-foreground group-hover:text-foreground" />
             </div>
             
-            <div className="h-4 w-px bg-border/50 hidden sm:block" />
-
             <Tabs value={activeTimeframe} onValueChange={setActiveTimeframe} className="h-8">
               <TabsList className="bg-transparent h-8 p-0 gap-1 overflow-x-auto max-w-[120px] sm:max-w-[300px] flex-nowrap scrollbar-none">
                 {TIMEFRAMES.map(tf => (
@@ -361,56 +366,9 @@ export default function DashboardPage() {
                 ))}
               </TabsList>
             </Tabs>
-
-            <div className="hidden lg:flex items-center gap-1.5 ml-2">
-              <Badge variant={isRealData ? "default" : "secondary"} className="text-[9px] h-4 px-1.5 font-bold uppercase tracking-wider">
-                {isRealData ? "Live" : "Demo"}
-              </Badge>
-              {isRealData && (
-                <div className={cn(
-                  "flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[8px] font-bold uppercase",
-                  socketConnected ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-red-500/10 border-red-500/20 text-red-500"
-                )}>
-                  {socketConnected ? <Wifi className="w-2 h-2" /> : <WifiOff className="w-2 h-2" />}
-                  {socketConnected ? "Connected" : "Disconnected"}
-                </div>
-              )}
-            </div>
           </div>
 
           <div className="flex items-center gap-1 sm:gap-1.5">
-            <div className="hidden sm:flex items-center gap-1">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="ghost" size="icon" 
-                      className={cn("h-8 w-8", indicators.sma.enabled && "text-primary bg-primary/10")}
-                      onClick={() => toggleIndicator('sma')}
-                    >
-                      <LineChart className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>SMA</TooltipContent>
-                </Tooltip>
-                
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="ghost" size="icon" 
-                      className={cn("h-8 w-8", indicators.rsi.enabled && "text-purple-400 bg-purple-400/10")}
-                      onClick={() => toggleIndicator('rsi')}
-                    >
-                      <Activity className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>RSI</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-
-            <div className="h-4 w-px bg-border/50 mx-1 sm:mx-2 hidden sm:block" />
-
             <Button 
               onClick={runAnalysis} 
               disabled={isAnalyzing || isLoadingData}
@@ -450,7 +408,6 @@ export default function DashboardPage() {
             </Button>
 
             <div className="h-4 w-px bg-border/50 mx-1 sm:mx-2" />
-            
             <UserNav />
           </div>
         </header>
@@ -479,16 +436,12 @@ export default function DashboardPage() {
             <div className="h-3 w-px bg-border/50 shrink-0 hidden sm:block" />
             <div className="flex items-center gap-2 text-destructive/80 italic overflow-hidden">
               <AlertTriangle className="w-3 h-3 shrink-0" />
-              <span className="truncate">Disclaimer: Algorithmic signals are for reference only, not financial advice.</span>
+              <span className="truncate">Disclaimer: Algorithmic signals are rule-based approximations for reference only.</span>
             </div>
-          </div>
-          <div className="hidden md:flex items-center gap-4 font-mono ml-4 shrink-0">
-            <span>UTC: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
           </div>
         </footer>
       </main>
 
-      {/* Right Side Panels */}
       <aside className={cn(
         "z-40 transition-all duration-300 ease-in-out shrink-0",
         isMobile ? "fixed inset-y-0 right-0 shadow-2xl" : "relative border-l",

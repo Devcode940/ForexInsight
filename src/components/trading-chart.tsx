@@ -20,6 +20,7 @@ interface TradingChartProps {
 
 export interface TradingChartHandle {
   resetView: () => void;
+  getVisibleData: () => Candlestick[];
 }
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({ data, indicators }, ref) => {
@@ -36,6 +37,20 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       if (chartRef.current) {
         chartRef.current.timeScale().fitContent();
       }
+    },
+    getVisibleData: () => {
+      if (!chartRef.current || data.length === 0) return [];
+      const timeScale = chartRef.current.timeScale();
+      const logicalRange = timeScale.getVisibleLogicalRange();
+      
+      if (!logicalRange) return data.slice(-100);
+
+      // Logical range matches the indices of the data array
+      const fromIndex = Math.max(0, Math.floor(logicalRange.from));
+      const toIndex = Math.min(data.length - 1, Math.ceil(logicalRange.to));
+      
+      // We want at least a few candles for context
+      return data.slice(fromIndex, toIndex + 1);
     }
   }));
 
@@ -107,7 +122,6 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     candlestickSeriesRef.current = candlestickSeries;
     volumeSeriesRef.current = volumeSeries;
 
-    // Use ResizeObserver for more robust responsive scaling
     const resizeObserver = new ResizeObserver(entries => {
       if (entries.length === 0 || !chartRef.current) return;
       const { width, height } = entries[0].contentRect;
