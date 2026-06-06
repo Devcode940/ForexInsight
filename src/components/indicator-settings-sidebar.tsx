@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { 
   Settings2, 
-  LineChart, 
+  LineChart as LineChartIcon, 
   Waves, 
   Activity, 
   X, 
@@ -18,12 +18,14 @@ import {
   BarChart3, 
   RotateCcw,
   BrainCircuit,
-  Sparkles,
-  TrendingUp
+  CandlestickChart,
+  TrendingUp,
+  Type
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export interface IndicatorConfig {
   enabled: boolean;
@@ -39,6 +41,7 @@ export interface IndicatorsState {
   macd: { enabled: boolean; fast: number; slow: number; signal: number };
   volume: { enabled: boolean };
   showPatternLabels: boolean;
+  chartType: 'candlestick' | 'line';
 }
 
 interface IndicatorSettingsSidebarProps {
@@ -83,7 +86,8 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
       rsi: { enabled: true, period: 14, color: '#9D4EDD' },
       macd: { enabled: false, fast: 12, slow: 26, signal: 9 },
       volume: { enabled: true },
-      showPatternLabels: true
+      showPatternLabels: true,
+      chartType: 'candlestick'
     };
     setIndicators(defaults);
   };
@@ -102,6 +106,49 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-8">
+          {/* Chart Display Section */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <BarChart3 className="w-4 h-4 text-primary" />
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Chart Display</h3>
+            </div>
+            
+            <div className="space-y-4 p-1">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold uppercase tracking-tighter">Series Style</Label>
+                <Tabs 
+                  value={indicators.chartType} 
+                  onValueChange={(val) => updateIndicator('chartType', val as any)}
+                  className="w-full"
+                >
+                  <TabsList className="grid w-full grid-cols-2 h-9 bg-muted/50">
+                    <TabsTrigger value="candlestick" className="text-[10px] font-bold uppercase gap-2">
+                      <CandlestickChart className="w-3.5 h-3.5" />
+                      Candle
+                    </TabsTrigger>
+                    <TabsTrigger value="line" className="text-[10px] font-bold uppercase gap-2">
+                      <LineChartIcon className="w-3.5 h-3.5" />
+                      Line
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+
+              <div className="flex items-center justify-between py-2 px-1 rounded-lg bg-muted/20">
+                <div className="flex items-center gap-2">
+                  <Type className="w-4 h-4 text-accent" />
+                  <Label className="text-[10px] font-bold uppercase tracking-tighter">Pattern Labels</Label>
+                </div>
+                <Switch 
+                  checked={indicators.showPatternLabels} 
+                  onCheckedChange={(val) => updateIndicator('showPatternLabels', val)} 
+                />
+              </div>
+            </div>
+          </section>
+
+          <Separator />
+
           {/* Connectivity Section */}
           <section className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
@@ -111,7 +158,7 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
             
             <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 space-y-4">
               <div className="space-y-2">
-                <Label className="text-[10px] font-bold uppercase tracking-tighter">Finnhub API Token</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-tighter">Data Provider (Finnhub)</Label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <Key className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -148,13 +195,6 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
                   className="min-h-[100px] text-xs bg-background resize-none"
                 />
               </div>
-              <div className="flex items-center justify-between py-1">
-                 <Label className="text-[10px] font-bold uppercase tracking-tighter">Show Pattern Labels</Label>
-                 <Switch 
-                   checked={indicators.showPatternLabels} 
-                   onCheckedChange={(val) => updateIndicator('showPatternLabels', val)} 
-                 />
-              </div>
             </div>
           </section>
 
@@ -185,7 +225,7 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
             <div className="space-y-4 p-1">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <LineChart className="w-4 h-4 text-blue-400" />
+                  <LineChartIcon className="w-4 h-4 text-blue-400" />
                   <Label className="text-xs font-bold">SMA</Label>
                 </div>
                 <Switch 

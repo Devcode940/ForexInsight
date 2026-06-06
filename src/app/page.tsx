@@ -14,7 +14,6 @@ import {
   MessageSquare,
   RefreshCw,
   AlertTriangle,
-  Globe,
   Newspaper
 } from 'lucide-react';
 import { 
@@ -24,14 +23,11 @@ import {
   mapSymbolToFinnhub, 
   mapTimeframeToResolution, 
   calculateRSI, 
-  calculateSMA, 
-  calculateEMA, 
   calculateMACD,
   getMockBasePrice,
   fetchMarketNews
 } from '@/lib/forex-data-utils';
 import { getExplainableTradeSignals } from '@/ai/flows/explainable-trade-signals';
-import { detectCandlestickPatterns } from '@/ai/flows/candlestick-pattern-recognition';
 import { generateAnalysisAudio } from '@/ai/flows/analysis-tts';
 import { fetchFinnhubCandles } from '@/app/actions/market-data';
 import { cn } from '@/lib/utils';
@@ -50,7 +46,6 @@ export default function DashboardPage() {
   const [isRealData, setIsRealData] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const chartRef = useRef<TradingChartHandle>(null);
-  const socketRef = useRef<WebSocket | null>(null);
   const { toast } = useToast();
   
   const [showWatchlist, setShowWatchlist] = useState(true);
@@ -64,11 +59,11 @@ export default function DashboardPage() {
     rsi: { enabled: true, period: 14, color: '#9D4EDD' },
     macd: { enabled: false, fast: 12, slow: 26, signal: 9 },
     volume: { enabled: true },
-    showPatternLabels: true
+    showPatternLabels: true,
+    chartType: 'candlestick'
   });
   
   const [signal, setSignal] = useState<any>();
-  const [patterns, setPatterns] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [signalHistory, setSignalHistory] = useState<any[]>([]);
@@ -114,7 +109,6 @@ export default function DashboardPage() {
       const apiKey = localStorage.getItem('finnhub_api_key') || '';
       const symbol = mapSymbolToFinnhub(activePair);
       
-      // Multi-timeframe fetch
       const dailyData = apiKey ? await fetchFinnhubCandles(symbol, 'D', apiKey) : generateMockForexData(getMockBasePrice(activePair), 50);
       const dailyTrend = dailyData && dailyData.length > 1 ? (dailyData[dailyData.length-1].close > dailyData[dailyData.length-2].close ? 'Bullish' : 'Bearish') : 'Neutral';
 
@@ -209,7 +203,7 @@ export default function DashboardPage() {
 
       <aside className={cn("z-40 transition-all duration-300", isMobile ? "fixed inset-y-0 right-0 shadow-2xl" : "relative border-l", (showIndicatorSettings || showAnalysisPanel) ? "w-80" : "w-0 overflow-hidden")}>
         {showIndicatorSettings && <IndicatorSettingsSidebar indicators={indicators} setIndicators={setIndicators} customAiInstructions={customAiInstructions} setCustomAiInstructions={setCustomAiInstructions} onClose={() => setShowIndicatorSettings(false)} />}
-        {showAnalysisPanel && <AnalysisPanel signal={signal} patterns={patterns} history={signalHistory} isLoading={isAnalyzing} isGeneratingAudio={isGeneratingAudio} onSelectFromHistory={(sig) => { setSignal(sig); setActivePair(sig.pair); setActiveTimeframe(sig.timeframe); }} onClose={() => setShowAnalysisPanel(false)} />}
+        {showAnalysisPanel && <AnalysisPanel signal={signal} history={signalHistory} isLoading={isAnalyzing} isGeneratingAudio={isGeneratingAudio} onSelectFromHistory={(sig) => { setSignal(sig); setActivePair(sig.pair); setActiveTimeframe(sig.timeframe); }} onClose={() => setShowAnalysisPanel(false)} />}
       </aside>
     </div>
   );

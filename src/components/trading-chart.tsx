@@ -7,6 +7,7 @@ import {
   IChartApi, 
   ISeriesApi, 
   CandlestickData, 
+  LineData,
   Time,
   SeriesMarker,
   IPriceLine,
@@ -14,9 +15,8 @@ import {
 } from 'lightweight-charts';
 import { Candlestick, detectPatterns, calculateRSI, calculateSMA, calculateEMA, calculateMACD } from '@/lib/forex-data-utils';
 import { IndicatorsState } from '@/components/indicator-settings-sidebar';
-import { ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 import { Button } from '@/components/ui/button';
-import { Pencil, Ruler, Trash2, Hash } from 'lucide-react';
+import { Trash2, Hash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TradingChartProps {
@@ -35,7 +35,7 @@ export interface TradingChartHandle {
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({ data, indicators, signal, symbol, timeframe }, ref) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const mainSeriesRef = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const smaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const emaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -61,6 +61,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     }
   }));
 
+  // Chart Initialization
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -77,18 +78,16 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       watermark: { color: 'rgba(255, 255, 255, 0.05)', visible: true, text: `${symbol} • ${timeframe}`, fontSize: 48, horzAlign: 'center', vertAlign: 'center' },
     });
 
-    const candlestickSeries = chart.addCandlestickSeries({ upColor: '#4CC9F0', downColor: '#FF4D4D', wickUpColor: '#4CC9F0', wickDownColor: '#FF4D4D', borderVisible: false });
+    chartRef.current = chart;
+
     const volumeSeries = chart.addHistogramSeries({ color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: '' });
     volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
-
-    chartRef.current = chart;
-    candlestickSeriesRef.current = candlestickSeries;
     volumeSeriesRef.current = volumeSeries;
 
     const handleChartClick = (param: MouseEventParams) => {
-      if (drawMode === 'hline' && param.price && candlestickSeriesRef.current) {
+      if (drawMode === 'hline' && param.price && mainSeriesRef.current) {
         const price = param.price;
-        const line = candlestickSeriesRef.current.createPriceLine({
+        mainSeriesRef.current.createPriceLine({
           price: price, color: '#94a3b8', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Manual Level'
         });
         setManualLines(prev => [...prev, { id: Math.random().toString(), price }]);
@@ -112,24 +111,62 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     };
   }, [symbol, timeframe, drawMode]);
 
+  // Handle Main Series (Candlestick vs Line)
   useEffect(() => {
-    if (candlestickSeriesRef.current && data.length > 0) {
-      candlestickSeriesRef.current.setData(data as CandlestickData<Time>[]);
+    if (!chartRef.current) return;
+
+    // Remove existing series if type changed
+    if (mainSeriesRef.current) {
+      chartRef.current.removeSeries(mainSeriesRef.current);
+      mainSeriesRef.current = null;
+    }
+
+    if (indicators.chartType === 'line') {
+      mainSeriesRef.current = chartRef.current.addLineSeries({
+        color: '#4CC9F0',
+        lineWidth: 2,
+        title: symbol,
+      });
+    } else {
+      mainSeriesRef.current = chartRef.current.addCandlestickSeries({
+        upColor: '#4CC9F0',
+        downColor: '#FF4D4D',
+        wickUpColor: '#4CC9F0',
+        wickDownColor: '#FF4D4D',
+        borderVisible: false
+      });
+    }
+  }, [indicators.chartType, symbol]);
+
+  // Update Data and Markers
+  useEffect(() => {
+    if (mainSeriesRef.current && data.length > 0) {
+      if (indicators.chartType === 'line') {
+        const lineData: LineData<Time>[] = data.map(d => ({
+          time: d.time as Time,
+          value: d.close
+        }));
+        (mainSeriesRef.current as ISeriesApi<'Line'>).setData(lineData);
+      } else {
+        (mainSeriesRef.current as ISeriesApi<'Candlestick'>).setData(data as CandlestickData<Time>[]);
+      }
+
       if (volumeSeriesRef.current) {
         volumeSeriesRef.current.setData(data.map(d => ({
           time: d.time as Time, value: d.volume || 0, color: d.close >= d.open ? 'rgba(38, 166, 154, 0.3)' : 'rgba(239, 83, 80, 0.3)'
         })));
       }
-      candlestickSeriesRef.current.setMarkers(detectPatterns(data).map(m => ({
+
+      mainSeriesRef.current.setMarkers(detectPatterns(data).map(m => ({
         ...m, text: indicators.showPatternLabels ? m.text : undefined
       })) as SeriesMarker<Time>[]);
     }
-  }, [data, indicators.showPatternLabels]);
+  }, [data, indicators.showPatternLabels, indicators.chartType]);
 
+  // Indicators syncing
   useEffect(() => {
     if (!chartRef.current || data.length === 0) return;
     
-    // Indicators syncing
     if (indicators.sma.enabled) {
       if (!smaSeriesRef.current) smaSeriesRef.current = chartRef.current.addLineSeries({ color: indicators.sma.color, lineWidth: 2, title: `SMA ${indicators.sma.period}` });
       smaSeriesRef.current.setData(calculateSMA(data, indicators.sma.period) as any);
@@ -165,17 +202,18 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     }
   }, [indicators, data]);
 
+  // AI Levels
   useEffect(() => {
-    if (!candlestickSeriesRef.current) return;
-    if (entryLineRef.current) candlestickSeriesRef.current.removePriceLine(entryLineRef.current);
-    if (slLineRef.current) candlestickSeriesRef.current.removePriceLine(slLineRef.current);
-    if (tpLineRef.current) candlestickSeriesRef.current.removePriceLine(tpLineRef.current);
+    if (!mainSeriesRef.current) return;
+    if (entryLineRef.current) mainSeriesRef.current.removePriceLine(entryLineRef.current);
+    if (slLineRef.current) mainSeriesRef.current.removePriceLine(slLineRef.current);
+    if (tpLineRef.current) mainSeriesRef.current.removePriceLine(tpLineRef.current);
 
     if (signal && data.length > 0) {
       const entryPrice = parseFloat(signal.entryZone?.split('-')[0]) || data[data.length-1].close;
-      entryLineRef.current = candlestickSeriesRef.current.createPriceLine({ price: entryPrice, color: '#4CC9F0', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'AI Entry' });
-      slLineRef.current = candlestickSeriesRef.current.createPriceLine({ price: signal.stopLoss, color: '#FF4D4D', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'AI SL' });
-      tpLineRef.current = candlestickSeriesRef.current.createPriceLine({ price: signal.takeProfit, color: '#4ADE80', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'AI TP' });
+      entryLineRef.current = mainSeriesRef.current.createPriceLine({ price: entryPrice, color: '#4CC9F0', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'AI Entry' });
+      slLineRef.current = mainSeriesRef.current.createPriceLine({ price: signal.stopLoss, color: '#FF4D4D', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'AI SL' });
+      tpLineRef.current = mainSeriesRef.current.createPriceLine({ price: signal.takeProfit, color: '#4ADE80', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'AI TP' });
     }
   }, [signal, data]);
 
