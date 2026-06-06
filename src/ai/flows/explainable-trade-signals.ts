@@ -1,56 +1,57 @@
 'use server';
 /**
- * @fileOverview This file defines an enhanced Genkit flow for generating intelligent trade signals with confluence analysis.
- *
- * - getExplainableTradeSignals - A function that calls the Genkit flow to generate trade signals and explanations.
- * - ExplainableTradeSignalsInput - The input type for the getExplainableTradeSignals function.
- * - ExplainableTradeSignalsOutput - The return type for the getExplainableTradeSignals function.
+ * @fileOverview This file defines an enhanced Genkit flow for generating intelligent trade signals with multi-timeframe confluence.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const CandleDataSchema = z.object({
-  open: z.number().describe('Opening price of the candle.'),
-  high: z.number().describe('Highest price of the candle.'),
-  low: z.number().describe('Lowest price of the candle.'),
-  close: z.number().describe('Closing price of the candle.'),
-  timestamp: z.number().describe('Unix timestamp of the candle.'),
+  open: z.number(),
+  high: z.number(),
+  low: z.number(),
+  close: z.number(),
+  timestamp: z.number(),
 });
 
 const ExplainableTradeSignalsInputSchema = z.object({
-  currencyPair: z.string().describe('The currency pair being analyzed (e.g., "EURUSD").'),
-  timeframe: z.string().describe('The current chart timeframe (e.g., "1m", "1H", "Daily").'),
-  candles: z.array(CandleDataSchema).describe('An array of recent past candlestick data for context.'),
+  currencyPair: z.string().describe('The currency pair being analyzed.'),
+  timeframe: z.string().describe('The primary chart timeframe.'),
+  candles: z.array(CandleDataSchema).describe('Recent primary timeframe candles.'),
+  correlationData: z.object({
+    dailyTrend: z.enum(['Bullish', 'Bearish', 'Neutral']).optional(),
+    h4Trend: z.enum(['Bullish', 'Bearish', 'Neutral']).optional(),
+    summary: z.string().optional(),
+  }).optional().describe('Context from higher timeframes.'),
+  newsContext: z.array(z.string()).optional().describe('Relevant recent market news.'),
   indicators: z.object({
-    sma: z.number().nullable().optional().describe('Simple Moving Average value.'),
-    ema: z.number().nullable().optional().describe('Exponential Moving Average value.'),
-    rsi: z.number().nullable().optional().describe('Relative Strength Index value.'),
+    sma: z.number().nullable().optional(),
+    ema: z.number().nullable().optional(),
+    rsi: z.number().nullable().optional(),
     macd: z.object({
       line: z.number(),
       signal: z.number(),
       histogram: z.number(),
-    }).optional().describe('MACD values.'),
-  }).optional().describe('Current values of various technical indicators.'),
-  detectedPatterns: z.array(z.string()).optional().describe('List of names of patterns detected in the current view.'),
-  customInstructions: z.string().optional().describe('User-provided custom instructions to bias the AI analysis.'),
+    }).optional(),
+  }).optional(),
+  detectedPatterns: z.array(z.string()).optional(),
+  customInstructions: z.string().optional(),
 });
-export type ExplainableTradeSignalsInput = z.infer<typeof ExplainableTradeSignalsInputSchema>;
 
 const ExplainableTradeSignalsOutputSchema = z.object({
-  direction: z.enum(['Bullish', 'Bearish', 'Neutral']).describe('The potential market direction.'),
-  entryZone: z.string().describe('Suggested Entry price zone.'),
-  stopLoss: z.number().describe('Stop Loss level.'),
-  takeProfit: z.number().describe('Take Profit level.'),
-  riskRewardRatio: z.string().describe('The calculated Risk-Reward Ratio (e.g., "1:2.5").'),
-  confidence: z.number().min(1).max(10).describe('Confidence level from 1 to 10 based on signal confluence.'),
-  confluenceFactors: z.array(z.string()).describe('List of specific technical factors that align for this signal (e.g., "RSI Oversold + Hammer").'),
-  reasoning: z.string().describe('Detailed reasoning for this analysis, explaining how indicators and patterns confirm each other.'),
-  riskWarning: z.string().describe('A specific risk warning for this trade.'),
+  direction: z.enum(['Bullish', 'Bearish', 'Neutral']),
+  entryZone: z.string(),
+  stopLoss: z.number(),
+  takeProfit: z.number(),
+  riskRewardRatio: z.string(),
+  confidence: z.number().min(1).max(10),
+  confluenceFactors: z.array(z.string()),
+  correlationAnalysis: z.string().describe('A brief explanation of how higher timeframes align with this trade.'),
+  reasoning: z.string(),
+  riskWarning: z.string(),
 });
-export type ExplainableTradeSignalsOutput = z.infer<typeof ExplainableTradeSignalsOutputSchema>;
 
-export async function getExplainableTradeSignals(input: ExplainableTradeSignalsInput): Promise<ExplainableTradeSignalsOutput> {
+export async function getExplainableTradeSignals(input: z.infer<typeof ExplainableTradeSignalsInputSchema>) {
   return explainableTradeSignalsFlow(input);
 }
 
@@ -58,31 +59,36 @@ const tradeSignalsPrompt = ai.definePrompt({
   name: 'explainableTradeSignalsPrompt',
   input: {schema: ExplainableTradeSignalsInputSchema},
   output: {schema: ExplainableTradeSignalsOutputSchema},
-  prompt: `You are a Senior Forex Analyst. Your goal is to find **high-probability confluence** for {{currencyPair}} on the {{timeframe}} timeframe.
+  prompt: `You are a Senior Institutional Forex Analyst. Analyze {{currencyPair}} on the {{timeframe}} chart.
 
-Technical Environment:
-- Recent Candles: {{candles.length}} candles provided.
-- Indicators: 
-  - RSI: {{indicators.rsi}}
-  - SMA: {{indicators.sma}}
-  - MACD: {{#if indicators.macd}}Line: {{indicators.macd.line}}, Signal: {{indicators.macd.signal}}{{else}}N/A{{/if}}
-- Patterns Detected: {{#each detectedPatterns}}{{this}}, {{/each}}
+MULT-TIMEFRAME CONTEXT:
+{{#if correlationData}}
+- Daily Trend: {{correlationData.dailyTrend}}
+- H4 Trend: {{correlationData.h4Trend}}
+- Correlation Notes: {{correlationData.summary}}
+{{/if}}
+
+MARKET NEWS:
+{{#if newsContext}}
+{{#each newsContext}}- {{this}}
+{{/each}}
+{{else}}No recent major news impact reported.{{/if}}
+
+TECHNICAL DATA:
+- RSI: {{indicators.rsi}}
+- MACD: {{#if indicators.macd}}Line: {{indicators.macd.line}}, Histogram: {{indicators.macd.histogram}}{{else}}N/A{{/if}}
+- Patterns: {{#each detectedPatterns}}{{this}}, {{/each}}
 
 {{#if customInstructions}}
-USER CUSTOM CONFIGURATION (PRIORITIZE THIS):
+USER BIAS/INSTRUCTIONS:
 {{{customInstructions}}}
 {{/if}}
 
-Analysis Requirements:
-1. **Confluence Check**: Look for overlapping signals. For example, is there a Bullish Engulfing pattern at an EMA support line? Is RSI showing divergence?
-2. **Trend Context**: Determine if the trend is with or against the signal.
-3. **Risk Management**: Suggest a Stop Loss and Take Profit that provides a logical Risk-Reward Ratio (ideally 1:2 or better).
-4. **Confidence Rating**: If indicators and patterns both point the same way, confidence should be high (8-10). If they conflict, be neutral or low confidence.
-5. **Mandatory Warning**: ALWAYS include a risk warning stating that trading involves high risk and this is not financial advice.
-
-{{#each candles}}
-Candle: {{timestamp}}, O: {{open}}, H: {{high}}, L: {{low}}, C: {{close}}
-{{/each}}
+REQUIREMENTS:
+1. Provide a trade direction based on multi-timeframe correlation. If the Daily trend is Bearish but the 5m is Bullish, flag this as a counter-trend trade with lower confidence.
+2. Define a clear entry zone and risk parameters.
+3. List confluence factors (e.g., "Daily EMA Support + 5m RSI Oversold").
+4. Provide a reasoning that synthesizes technicals, correlation, and news.
 `
 });
 
