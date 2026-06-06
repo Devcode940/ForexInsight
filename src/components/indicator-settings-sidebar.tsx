@@ -18,7 +18,8 @@ import {
   BarChart3, 
   RotateCcw,
   BrainCircuit,
-  Sparkles
+  Sparkles,
+  TrendingUp
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -35,6 +36,7 @@ export interface IndicatorsState {
   ema: IndicatorConfig;
   bb: IndicatorConfig;
   rsi: IndicatorConfig;
+  macd: { enabled: boolean; fast: number; slow: number; signal: number };
   volume: { enabled: boolean };
   showPatternLabels: boolean;
 }
@@ -79,6 +81,7 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
       ema: { enabled: false, period: 50, color: '#FFBE0B' },
       bb: { enabled: false, period: 20, color: '#00F5D4' },
       rsi: { enabled: true, period: 14, color: '#9D4EDD' },
+      macd: { enabled: false, fast: 12, slow: 26, signal: 9 },
       volume: { enabled: true },
       showPatternLabels: true
     };
@@ -144,10 +147,13 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
                   placeholder="e.g. Focus on 5m scalping strategies using RSI and Price Action..." 
                   className="min-h-[100px] text-xs bg-background resize-none"
                 />
-                <div className="flex items-center gap-2 py-1">
-                   <Sparkles className="w-3 h-3 text-accent" />
-                   <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-tight">Saved to cloud automatically</span>
-                </div>
+              </div>
+              <div className="flex items-center justify-between py-1">
+                 <Label className="text-[10px] font-bold uppercase tracking-tighter">Show Pattern Labels</Label>
+                 <Switch 
+                   checked={indicators.showPatternLabels} 
+                   onCheckedChange={(val) => updateIndicator('showPatternLabels', val)} 
+                 />
               </div>
             </div>
           </section>
@@ -161,19 +167,21 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
               <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Technical Overlays</h3>
             </div>
 
-            {/* Volume */}
-            <div className="flex items-center justify-between p-1">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-green-400" />
-                <Label className="text-xs font-bold">Volume Histogram</Label>
+            {/* MACD */}
+            <div className="space-y-4 p-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-blue-500" />
+                  <Label className="text-xs font-bold">MACD</Label>
+                </div>
+                <Switch 
+                  checked={indicators.macd.enabled} 
+                  onCheckedChange={(val) => updateIndicator('macd', { enabled: val })} 
+                />
               </div>
-              <Switch 
-                checked={indicators.volume.enabled} 
-                onCheckedChange={(val) => updateIndicator('volume', { enabled: val })} 
-              />
             </div>
 
-            {/* SMA Settings */}
+            {/* SMA */}
             <div className="space-y-4 p-1">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -187,21 +195,17 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
               </div>
               {indicators.sma.enabled && (
                 <div className="space-y-3 pl-6">
-                  <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
-                    <span>Period</span>
-                    <span className="font-mono text-foreground">{indicators.sma.period}</span>
-                  </div>
                   <Slider 
                     value={[indicators.sma.period]} 
                     min={5} max={200} step={1} 
                     onValueChange={([val]) => updateIndicator('sma', { period: val })} 
-                    className="py-2"
                   />
+                  <span className="text-[10px] text-muted-foreground">Period: {indicators.sma.period}</span>
                 </div>
               )}
             </div>
 
-            {/* EMA Settings */}
+            {/* EMA */}
             <div className="space-y-4 p-1">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -215,16 +219,12 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
               </div>
               {indicators.ema.enabled && (
                 <div className="space-y-3 pl-6">
-                  <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
-                    <span>Period</span>
-                    <span className="font-mono text-foreground">{indicators.ema.period}</span>
-                  </div>
                   <Slider 
                     value={[indicators.ema.period]} 
                     min={5} max={200} step={1} 
                     onValueChange={([val]) => updateIndicator('ema', { period: val })} 
-                    className="py-2"
                   />
+                  <span className="text-[10px] text-muted-foreground">Period: {indicators.ema.period}</span>
                 </div>
               )}
             </div>
@@ -243,16 +243,12 @@ export const IndicatorSettingsSidebar: React.FC<IndicatorSettingsSidebarProps> =
               </div>
               {indicators.rsi.enabled && (
                 <div className="space-y-3 pl-6">
-                  <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
-                    <span>Period</span>
-                    <span className="font-mono text-foreground">{indicators.rsi.period}</span>
-                  </div>
                   <Slider 
                     value={[indicators.rsi.period]} 
                     min={2} max={30} step={1} 
                     onValueChange={([val]) => updateIndicator('rsi', { period: val })} 
-                    className="py-2"
                   />
+                  <span className="text-[10px] text-muted-foreground">Period: {indicators.rsi.period}</span>
                 </div>
               )}
             </div>

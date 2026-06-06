@@ -46,26 +46,14 @@ export function getMockBasePrice(pair: string): number {
 }
 
 /**
- * Determine instrument type for volume calculations
- */
-function getInstrumentType(pair: string): 'forex' | 'metal' {
-  if (pair.startsWith('XAU') || pair.startsWith('XAG')) {
-    return 'metal';
-  }
-  return 'forex';
-}
-
-/**
  * Maps dashboard symbols to Finnhub/OANDA format
  */
 export function mapSymbolToFinnhub(pair: string): string {
-  if (pair.includes(':')) return pair; // Already mapped
+  if (pair.includes(':')) return pair; 
   
-  // Specific overrides
   if (pair === 'XAUUSD') return 'OANDA:XAU_USD';
   if (pair === 'XAGUSD') return 'OANDA:XAG_USD';
   
-  // Standard FX mapping: EURUSD -> OANDA:EUR_USD
   if (pair.length === 6) {
     return `OANDA:${pair.substring(0, 3)}_${pair.substring(3, 6)}`;
   }
@@ -83,7 +71,6 @@ export function mapTimeframeToResolution(tf: string): string {
     '15m': '15',
     '30m': '30',
     '1H': '60',
-    '4H': '60', // Finnhub free doesn't always support 240, defaulting to 60
     'D': 'D',
     'W': 'W',
     'M': 'M'
@@ -96,19 +83,17 @@ export function generateMockForexData(basePrice: number, count: number = 200): C
   let currentPrice = basePrice;
   const now = new Date();
   
-  // Determine appropriate volume scale based on instrument type
-  const isMetal = basePrice > 1000 || basePrice < 50; // Simple heuristic for Gold/Silver
+  const isMetal = basePrice > 1000 || basePrice < 50;
   const baseVolume = isMetal ? 50000 : 1000000;
   
   for (let i = 0; i < count; i++) {
-    const time = new Date(now.getTime() - (count - i) * 3600000); // 1h intervals
+    const time = new Date(now.getTime() - (count - i) * 3600000); 
     const volatility = basePrice * 0.005;
     const open = currentPrice;
     const close = open + (Math.random() - 0.5) * volatility;
     const high = Math.max(open, close) + Math.random() * volatility * 0.5;
     const low = Math.min(open, close) - Math.random() * volatility * 0.5;
     
-    // Generate realistic volume with variation (50% to 150% of base)
     const volumeVariation = 0.5 + Math.random();
     const volume = Math.floor(baseVolume * volumeVariation);
     
@@ -191,6 +176,42 @@ export function calculateRSI(data: Candlestick[], period: number = 14) {
   return rsi;
 }
 
+export function calculateMACD(data: Candlestick[], fast: number = 12, slow: number = 26, signal: number = 9) {
+  const emaFast = calculateEMA(data, fast);
+  const emaSlow = calculateEMA(data, slow);
+  
+  const macdLine: { time: string | number; value: number }[] = [];
+  for (let i = 0; i < data.length; i++) {
+    const f = emaFast.find(e => e.time === data[i].time);
+    const s = emaSlow.find(e => e.time === data[i].time);
+    if (f && s) {
+      macdLine.push({ time: data[i].time, value: Number((f.value - s.value).toFixed(5)) });
+    }
+  }
+  
+  // Calculate Signal Line (EMA of MACD Line)
+  // We need to convert macdLine to Candlestick-like format for calculateEMA
+  const macdAsCandles = macdLine.map(m => ({
+    time: m.time,
+    open: m.value,
+    high: m.value,
+    low: m.value,
+    close: m.value
+  }));
+  
+  const signalLine = calculateEMA(macdAsCandles as any, signal);
+  
+  const histogram: { time: string | number; value: number }[] = [];
+  for (let i = 0; i < macdLine.length; i++) {
+    const sig = signalLine.find(s => s.time === macdLine[i].time);
+    if (sig) {
+      histogram.push({ time: macdLine[i].time, value: Number((macdLine[i].value - sig.value).toFixed(5)) });
+    }
+  }
+  
+  return { line: macdLine, signal: signalLine, histogram };
+}
+
 export function detectPatterns(data: Candlestick[]) {
   const markers = [];
   
@@ -203,65 +224,24 @@ export function detectPatterns(data: Candlestick[]) {
     const upperWick = curr.high - Math.max(curr.open, curr.close);
     const lowerWick = Math.min(curr.open, curr.close) - curr.low;
     
-    // 1. Bullish Engulfing
-    const isPrevBearish = prev.close < prev.open;
-    const isCurrBullish = curr.close > curr.open;
-    const engulfsBullish = curr.open <= prev.close && curr.close >= prev.open;
-    if (isPrevBearish && isCurrBullish && engulfsBullish) {
-      markers.push({
-        time: curr.time,
-        position: 'belowBar',
-        color: '#4ade80',
-        shape: 'arrowUp',
-        text: 'Bullish Engulfing'
-      });
+    if (prev.close < prev.open && curr.close > curr.open && curr.open <= prev.close && curr.close >= prev.open) {
+      markers.push({ time: curr.time, position: 'belowBar', color: '#4ade80', shape: 'arrowUp', text: 'Bullish Engulfing' });
     }
 
-    // 2. Bearish Engulfing
-    const isPrevBullish = prev.close > prev.open;
-    const isCurrBearish = curr.close < curr.open;
-    const engulfsBearish = curr.open >= prev.close && curr.close <= prev.open;
-    if (isPrevBullish && isCurrBearish && engulfsBearish) {
-      markers.push({
-        time: curr.time,
-        position: 'aboveBar',
-        color: '#f87171',
-        shape: 'arrowDown',
-        text: 'Bearish Engulfing'
-      });
+    if (prev.close > prev.open && curr.close < curr.open && curr.open >= prev.close && curr.close <= prev.open) {
+      markers.push({ time: curr.time, position: 'aboveBar', color: '#f87171', shape: 'arrowDown', text: 'Bearish Engulfing' });
     }
 
-    // 3. Doji
     if (bodySize <= totalSize * 0.1) {
-      markers.push({
-        time: curr.time,
-        position: 'inBar',
-        color: '#9ca3af',
-        shape: 'circle',
-        text: 'Doji'
-      });
+      markers.push({ time: curr.time, position: 'inBar', color: '#9ca3af', shape: 'circle', text: 'Doji' });
     }
 
-    // 4. Hammer
     if (lowerWick >= bodySize * 2 && upperWick <= bodySize * 0.5) {
-      markers.push({
-        time: curr.time,
-        position: 'belowBar',
-        color: '#3b82f6',
-        shape: 'arrowUp',
-        text: 'Hammer'
-      });
+      markers.push({ time: curr.time, position: 'belowBar', color: '#3b82f6', shape: 'arrowUp', text: 'Hammer' });
     }
 
-    // 5. Shooting Star
     if (upperWick >= bodySize * 2 && lowerWick <= bodySize * 0.5) {
-      markers.push({
-        time: curr.time,
-        position: 'aboveBar',
-        color: '#f59e0b',
-        shape: 'arrowDown',
-        text: 'Shooting Star'
-      });
+      markers.push({ time: curr.time, position: 'aboveBar', color: '#f59e0b', shape: 'arrowDown', text: 'Shooting Star' });
     }
   }
   return markers;
