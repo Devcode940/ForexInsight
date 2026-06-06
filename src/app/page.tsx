@@ -5,7 +5,6 @@ import { WatchlistSidebar } from '@/components/watchlist-sidebar';
 import { TradingChart, TradingChartHandle } from '@/components/trading-chart';
 import { AnalysisPanel } from '@/components/analysis-panel';
 import { IndicatorSettingsSidebar, IndicatorsState } from '@/components/indicator-settings-sidebar';
-import { UserNav } from '@/components/user-nav';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
@@ -34,21 +33,17 @@ import { fetchFinnhubCandles } from '@/app/actions/market-data';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useAuth } from '@/hooks/use-auth';
-import { getUserPreferences, saveUserPreferences, saveTradeSignal } from '@/lib/supabase/store';
 
 const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', 'D', 'W', 'M'];
 
 export default function DashboardPage() {
   const isMobile = useIsMobile();
-  const { user } = useAuth();
   const [activePair, setActivePair] = useState('XAUUSD');
   const [activeTimeframe, setActiveTimeframe] = useState('1H');
   const [customAiInstructions, setCustomAiInstructions] = useState('');
   const [data, setData] = useState<Candlestick[]>([]);
   const [isRealData, setIsRealData] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
   
   const chartRef = useRef<TradingChartHandle>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -78,32 +73,6 @@ export default function DashboardPage() {
       setShowAnalysisPanel(false);
     }
   }, [isMobile]);
-
-  useEffect(() => {
-    if (user) {
-      setIsInitialLoad(true);
-      getUserPreferences(user.id).then(prefs => {
-        if (prefs) {
-          if (prefs.activePair) setActivePair(prefs.activePair);
-          if (prefs.activeTimeframe) setActiveTimeframe(prefs.activeTimeframe);
-          if (prefs.indicators) setIndicators(prefs.indicators);
-          if (prefs.customAiInstructions) setCustomAiInstructions(prefs.customAiInstructions);
-        }
-        setTimeout(() => setIsInitialLoad(false), 200);
-      });
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (user && !isInitialLoad) {
-      saveUserPreferences(user.id, {
-        activePair,
-        activeTimeframe,
-        indicators,
-        customAiInstructions
-      });
-    }
-  }, [user, activePair, activeTimeframe, indicators, customAiInstructions, isInitialLoad]);
 
   const loadMarketData = async () => {
     const apiKey = localStorage.getItem('finnhub_api_key');
@@ -226,10 +195,6 @@ export default function DashboardPage() {
       
       setSignal({ ...result, analyzedCandleCount: recentCandles.length });
 
-      if (user) {
-        await saveTradeSignal(user.id, result, activePair, activeTimeframe);
-      }
-
       const patternResult = await detectCandlestickPatterns({
         candles: recentCandles.slice(-30).map(c => ({
           ...c,
@@ -285,7 +250,6 @@ export default function DashboardPage() {
             <Button variant="ghost" size="icon" className={cn("h-8 w-8", showAnalysisPanel && "text-primary")} onClick={() => { setShowAnalysisPanel(!showAnalysisPanel); setShowIndicatorSettings(false); }}>
               <MessageSquare className="w-4 h-4" />
             </Button>
-            <UserNav />
           </div>
         </header>
 
