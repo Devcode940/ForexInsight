@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -13,7 +14,8 @@ import {
   PanelLeft,
   MessageSquare,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  Clock
 } from 'lucide-react';
 import { 
   generateMockForexData, 
@@ -29,6 +31,7 @@ import {
 } from '@/lib/forex-data-utils';
 import { getExplainableTradeSignals, ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 import { detectCandlestickPatterns } from '@/ai/flows/candlestick-pattern-recognition';
+import { generateAnalysisAudio } from '@/ai/flows/analysis-tts';
 import { fetchFinnhubCandles } from '@/app/actions/market-data';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -63,9 +66,23 @@ export default function DashboardPage() {
     showPatternLabels: true
   });
   
-  const [signal, setSignal] = useState<ExplainableTradeSignalsOutput & { analyzedCandleCount?: number } | undefined>();
+  const [signal, setSignal] = useState<ExplainableTradeSignalsOutput & { analyzedCandleCount?: number; audioUri?: string } | undefined>();
   const [patterns, setPatterns] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [signalHistory, setSignalHistory] = useState<any[]>([]);
+
+  // Load signal history from localStorage on mount
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('fx_signal_history');
+    if (savedHistory) {
+      try {
+        setSignalHistory(JSON.parse(savedHistory));
+      } catch (e) {
+        console.error('Failed to parse signal history');
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (isMobile) {
@@ -193,8 +210,15 @@ export default function DashboardPage() {
         customInstructions: customAiInstructions
       });
       
-      setSignal({ ...result, analyzedCandleCount: recentCandles.length });
+      const newSignal = { ...result, analyzedCandleCount: recentCandles.length, timestamp: Date.now(), pair: activePair };
+      setSignal(newSignal);
 
+      // Add to session history
+      const updatedHistory = [newSignal, ...signalHistory.slice(0, 9)];
+      setSignalHistory(updatedHistory);
+      localStorage.setItem('fx_signal_history', JSON.stringify(updatedHistory));
+
+      // Fetch patterns
       const patternResult = await detectCandlestickPatterns({
         candles: recentCandles.slice(-30).map(c => ({
           ...c,
@@ -204,12 +228,30 @@ export default function DashboardPage() {
       });
       setPatterns(patternResult.patterns);
 
+      // Trigger TTS generation automatically
+      try {
+        setIsGeneratingAudio(true);
+        const audioResult = await generateAnalysisAudio({ text: result.reasoning });
+        setSignal(prev => prev ? { ...prev, audioUri: audioResult.audioDataUri } : undefined);
+      } catch (err) {
+        console.error('TTS failed', err);
+      } finally {
+        setIsGeneratingAudio(false);
+      }
+
     } catch (error) {
       console.error(error);
       toast({ title: "Analysis Failed", variant: "destructive" });
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const loadSignalFromHistory = (histSignal: any) => {
+    setSignal(histSignal);
+    setActivePair(histSignal.pair);
+    setShowAnalysisPanel(true);
+    if (isMobile) setShowWatchlist(false);
   };
 
   return (
@@ -284,7 +326,17 @@ export default function DashboardPage() {
 
       <aside className={cn("z-40 transition-all duration-300", isMobile ? "fixed inset-y-0 right-0 shadow-2xl" : "relative border-l", (showIndicatorSettings || showAnalysisPanel) ? "translate-x-0 w-80" : "translate-x-full w-0")}>
         {showIndicatorSettings && <IndicatorSettingsSidebar indicators={indicators} setIndicators={setIndicators} customAiInstructions={customAiInstructions} setCustomAiInstructions={setCustomAiInstructions} onClose={() => setShowIndicatorSettings(false)} />}
-        {showAnalysisPanel && <AnalysisPanel signal={signal} patterns={patterns} isLoading={isAnalyzing} onClose={() => setShowAnalysisPanel(false)} />}
+        {showAnalysisPanel && (
+          <AnalysisPanel 
+            signal={signal} 
+            patterns={patterns} 
+            history={signalHistory}
+            isLoading={isAnalyzing} 
+            isGeneratingAudio={isGeneratingAudio}
+            onSelectFromHistory={loadSignalFromHistory}
+            onClose={() => setShowAnalysisPanel(false)} 
+          />
+        )}
       </aside>
     </div>
   );
