@@ -11,11 +11,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Settings2, 
   Zap, 
-  ChevronDown,
-  AlertTriangle,
   PanelLeft,
   MessageSquare,
-  RefreshCw
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   generateMockForexData, 
@@ -297,7 +296,14 @@ export default function DashboardPage() {
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Syncing Market Data...</span>
             </div>
           )}
-          <TradingChart ref={chartRef} data={data} indicators={indicators} signal={signal} />
+          <TradingChart 
+            ref={chartRef} 
+            data={data} 
+            indicators={indicators} 
+            signal={signal} 
+            symbol={activePair}
+            timeframe={activeTimeframe}
+          />
         </div>
 
         <footer className="h-10 border-t bg-sidebar/80 flex items-center justify-between px-4 text-[9px] font-bold text-muted-foreground uppercase tracking-wider italic">

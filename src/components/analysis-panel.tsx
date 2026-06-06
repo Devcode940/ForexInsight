@@ -6,22 +6,20 @@ import {
   BrainCircuit, 
   Zap, 
   Target, 
-  AlertCircle, 
   Eye,
   ArrowRightCircle,
   Stethoscope,
   Scale,
-  CheckCircle2,
   X,
   History,
-  Clock
+  Clock,
+  ExternalLink
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { getSignalHistory, StoredSignal } from '@/lib/supabase/store';
@@ -46,60 +44,75 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
     }
   }, [user, activeTab, signal]);
 
-  const SignalCard = ({ sig, candleCount }: { sig: ExplainableTradeSignalsOutput, candleCount?: number }) => (
-    <div className={cn(
-      "p-4 rounded-xl border border-border/50 shadow-sm",
-      sig.direction === 'Bullish' ? "bg-green-500/5 border-green-500/20" : 
-      sig.direction === 'Bearish' ? "bg-red-500/5 border-red-500/20" : "bg-muted/10"
-    )}>
-      <div className="flex justify-between items-start mb-4">
-        <Badge className={cn(
-          "text-[10px] font-bold px-2 py-0.5",
-          sig.direction === 'Bullish' ? "bg-green-500 text-white" : 
-          sig.direction === 'Bearish' ? "bg-red-500 text-white" : "bg-muted text-muted-foreground"
-        )}>
-          {sig.direction.toUpperCase()}
-        </Badge>
-        <div className="text-right">
-          <span className="text-[9px] font-bold text-muted-foreground uppercase block">Confidence</span>
-          <span className="text-sm font-mono font-bold text-primary">{sig.confidence}/10</span>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        <div className="p-2 rounded bg-muted/20 border border-border/30">
-          <span className="text-[8px] font-bold text-muted-foreground uppercase flex items-center gap-1">
-            <Target className="w-2.5 h-2.5" /> Entry
-          </span>
-          <p className="text-[10px] font-bold font-mono text-foreground mt-0.5">{sig.entryZone}</p>
-        </div>
-        <div className="p-2 rounded bg-muted/20 border border-border/30">
-          <span className="text-[8px] font-bold text-muted-foreground uppercase flex items-center gap-1">
-            <Scale className="w-2.5 h-2.5" /> RR Ratio
-          </span>
-          <p className="text-[10px] font-bold font-mono text-primary mt-0.5">{sig.riskRewardRatio}</p>
-        </div>
-        <div className="p-2 rounded bg-muted/20 border border-border/30">
-          <span className="text-[8px] font-bold text-muted-foreground uppercase">SL</span>
-          <p className="text-[10px] font-bold font-mono text-red-400 mt-0.5">{sig.stopLoss}</p>
-        </div>
-        <div className="p-2 rounded bg-muted/20 border border-border/30">
-          <span className="text-[8px] font-bold text-muted-foreground uppercase">TP</span>
-          <p className="text-[10px] font-bold font-mono text-green-400 mt-0.5">{sig.takeProfit}</p>
-        </div>
-      </div>
+  const SignalCard = ({ sig, candleCount, showHeader = true }: { sig: ExplainableTradeSignalsOutput | StoredSignal, candleCount?: number, showHeader?: boolean }) => {
+    const isHistory = 'createdAt' in sig;
+    const s = sig as any;
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-1.5 text-primary">
-          <ArrowRightCircle className="w-3 h-3" />
-          <span className="text-[9px] font-bold uppercase tracking-wider">Reasoning</span>
+    return (
+      <div className={cn(
+        "p-4 rounded-xl border border-border/50 shadow-sm",
+        s.direction === 'Bullish' ? "bg-green-500/5 border-green-500/20" : 
+        s.direction === 'Bearish' ? "bg-red-500/5 border-red-500/20" : "bg-muted/10"
+      )}>
+        {isHistory && (
+           <div className="flex justify-between items-center mb-3 pb-2 border-b border-border/30">
+             <div className="flex flex-col">
+               <span className="text-[10px] font-bold text-foreground">{s.currencyPair} • {s.timeframe}</span>
+               <span className="text-[8px] text-muted-foreground">{formatDistanceToNow(s.createdAt)} ago</span>
+             </div>
+             <Badge variant="outline" className="text-[8px] font-bold opacity-60">ID: {s.createdAt.toString().slice(-6)}</Badge>
+           </div>
+        )}
+
+        <div className="flex justify-between items-start mb-4">
+          <Badge className={cn(
+            "text-[10px] font-bold px-2 py-0.5",
+            s.direction === 'Bullish' ? "bg-green-500 text-white" : 
+            s.direction === 'Bearish' ? "bg-red-500 text-white" : "bg-muted text-muted-foreground"
+          )}>
+            {s.direction.toUpperCase()}
+          </Badge>
+          <div className="text-right">
+            <span className="text-[9px] font-bold text-muted-foreground uppercase block">Confidence</span>
+            <span className="text-sm font-mono font-bold text-primary">{s.confidence}/10</span>
+          </div>
         </div>
-        <p className="text-[11px] leading-relaxed text-foreground/80 font-medium italic">
-          "{sig.reasoning}"
-        </p>
+        
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <div className="p-2 rounded bg-muted/20 border border-border/30">
+            <span className="text-[8px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+              <Target className="w-2.5 h-2.5" /> Entry
+            </span>
+            <p className="text-[10px] font-bold font-mono text-foreground mt-0.5">{s.entryZone}</p>
+          </div>
+          <div className="p-2 rounded bg-muted/20 border border-border/30">
+            <span className="text-[8px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+              <Scale className="w-2.5 h-2.5" /> RR Ratio
+            </span>
+            <p className="text-[10px] font-bold font-mono text-primary mt-0.5">{s.riskRewardRatio}</p>
+          </div>
+          <div className="p-2 rounded bg-muted/20 border border-border/30">
+            <span className="text-[8px] font-bold text-muted-foreground uppercase">SL</span>
+            <p className="text-[10px] font-bold font-mono text-red-400 mt-0.5">{s.stopLoss}</p>
+          </div>
+          <div className="p-2 rounded bg-muted/20 border border-border/30">
+            <span className="text-[8px] font-bold text-muted-foreground uppercase">TP</span>
+            <p className="text-[10px] font-bold font-mono text-green-400 mt-0.5">{s.takeProfit}</p>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 text-primary">
+            <ArrowRightCircle className="w-3 h-3" />
+            <span className="text-[9px] font-bold uppercase tracking-wider">Reasoning</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-foreground/80 font-medium italic">
+            "{s.reasoning}"
+          </p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="w-full h-full border-l bg-sidebar flex flex-col overflow-hidden">
@@ -159,7 +172,10 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
                   {patterns.length > 0 ? (
                     patterns.map((p, idx) => (
                       <div key={idx} className="p-3 rounded-lg bg-muted/20 border border-border/30">
-                        <span className="text-xs font-bold block mb-1">{p.patternName}</span>
+                        <div className="flex items-center justify-between mb-1">
+                           <span className="text-xs font-bold">{p.patternName}</span>
+                           <ExternalLink className="w-2.5 h-2.5 text-muted-foreground" />
+                        </div>
                         <p className="text-[10px] text-muted-foreground leading-normal">{p.explanation}</p>
                       </div>
                     ))
@@ -173,14 +189,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ signal, patterns =
           <TabsContent value="history" className="p-4 m-0 space-y-4">
             {history.length > 0 ? (
               history.map((h, i) => (
-                <div key={i} className="space-y-2 pb-4 border-b last:border-0">
-                  <div className="flex justify-between items-center text-[9px] font-bold text-muted-foreground uppercase">
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-2.5 h-2.5" />
-                      {formatDistanceToNow(h.createdAt)} ago
-                    </div>
-                    <span>{h.currencyPair} • {h.timeframe}</span>
-                  </div>
+                <div key={i} className="pb-4 border-b last:border-0">
                   <SignalCard sig={h} />
                 </div>
               ))

@@ -189,8 +189,6 @@ export function calculateMACD(data: Candlestick[], fast: number = 12, slow: numb
     }
   }
   
-  // Calculate Signal Line (EMA of MACD Line)
-  // We need to convert macdLine to Candlestick-like format for calculateEMA
   const macdAsCandles = macdLine.map(m => ({
     time: m.time,
     open: m.value,
@@ -215,7 +213,8 @@ export function calculateMACD(data: Candlestick[], fast: number = 12, slow: numb
 export function detectPatterns(data: Candlestick[]) {
   const markers = [];
   
-  for (let i = 1; i < data.length; i++) {
+  for (let i = 2; i < data.length; i++) {
+    const prev2 = data[i - 2];
     const prev = data[i - 1];
     const curr = data[i];
     
@@ -224,24 +223,34 @@ export function detectPatterns(data: Candlestick[]) {
     const upperWick = curr.high - Math.max(curr.open, curr.close);
     const lowerWick = Math.min(curr.open, curr.close) - curr.low;
     
+    // Engulfing
     if (prev.close < prev.open && curr.close > curr.open && curr.open <= prev.close && curr.close >= prev.open) {
       markers.push({ time: curr.time, position: 'belowBar', color: '#4ade80', shape: 'arrowUp', text: 'Bullish Engulfing' });
     }
-
     if (prev.close > prev.open && curr.close < curr.open && curr.open >= prev.close && curr.close <= prev.open) {
       markers.push({ time: curr.time, position: 'aboveBar', color: '#f87171', shape: 'arrowDown', text: 'Bearish Engulfing' });
     }
 
+    // Doji
     if (bodySize <= totalSize * 0.1) {
       markers.push({ time: curr.time, position: 'inBar', color: '#9ca3af', shape: 'circle', text: 'Doji' });
     }
 
+    // Hammer / Shooting Star
     if (lowerWick >= bodySize * 2 && upperWick <= bodySize * 0.5) {
       markers.push({ time: curr.time, position: 'belowBar', color: '#3b82f6', shape: 'arrowUp', text: 'Hammer' });
     }
-
     if (upperWick >= bodySize * 2 && lowerWick <= bodySize * 0.5) {
       markers.push({ time: curr.time, position: 'aboveBar', color: '#f59e0b', shape: 'arrowDown', text: 'Shooting Star' });
+    }
+
+    // Morning Star
+    if (prev2.close < prev2.open && Math.abs(prev.close - prev.open) < Math.abs(prev2.close - prev2.open) * 0.3 && curr.close > curr.open && curr.close > (prev2.open + prev2.close) / 2) {
+      markers.push({ time: curr.time, position: 'belowBar', color: '#10b981', shape: 'arrowUp', text: 'Morning Star' });
+    }
+    // Evening Star
+    if (prev2.close > prev2.open && Math.abs(prev.close - prev.open) < Math.abs(prev2.close - prev2.open) * 0.3 && curr.close < curr.open && curr.close < (prev2.open + prev2.close) / 2) {
+      markers.push({ time: curr.time, position: 'aboveBar', color: '#ef4444', shape: 'arrowDown', text: 'Evening Star' });
     }
   }
   return markers;

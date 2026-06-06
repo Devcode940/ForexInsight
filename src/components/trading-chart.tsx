@@ -19,6 +19,8 @@ interface TradingChartProps {
   data: Candlestick[];
   indicators: IndicatorsState;
   signal?: ExplainableTradeSignalsOutput;
+  symbol: string;
+  timeframe: string;
 }
 
 export interface TradingChartHandle {
@@ -26,7 +28,7 @@ export interface TradingChartHandle {
   getVisibleData: () => Candlestick[];
 }
 
-export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({ data, indicators, signal }, ref) => {
+export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({ data, indicators, signal, symbol, timeframe }, ref) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -83,6 +85,18 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       rightPriceScale: { borderColor: '#2B2B43', autoScale: true },
     });
 
+    // Add Watermark
+    chart.applyOptions({
+      watermark: {
+        color: 'rgba(255, 255, 255, 0.05)',
+        visible: true,
+        text: `${symbol} • ${timeframe}`,
+        fontSize: 48,
+        horzAlign: 'center',
+        vertAlign: 'center',
+      },
+    });
+
     const candlestickSeries = chart.addCandlestickSeries({
       upColor: '#4CC9F0',
       downColor: '#FF4D4D',
@@ -117,7 +131,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       resizeObserver.disconnect();
       chart.remove();
     };
-  }, []);
+  }, [symbol, timeframe]);
 
   useEffect(() => {
     if (candlestickSeriesRef.current && data.length > 0) {
@@ -127,7 +141,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
         const volumeData = data.map(d => ({
           time: d.time as Time,
           value: d.volume || 0,
-          color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+          color: d.close >= d.open ? 'rgba(38, 166, 154, 0.3)' : 'rgba(239, 83, 80, 0.3)'
         }));
         volumeSeriesRef.current.setData(volumeData);
       }
@@ -152,6 +166,8 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     if (indicators.sma.enabled) {
       if (!smaSeriesRef.current) {
         smaSeriesRef.current = chartRef.current.addLineSeries({ color: indicators.sma.color, lineWidth: 2, title: `SMA ${indicators.sma.period}` });
+      } else {
+        smaSeriesRef.current.applyOptions({ color: indicators.sma.color, title: `SMA ${indicators.sma.period}` });
       }
       smaSeriesRef.current.setData(calculateSMA(data, indicators.sma.period) as any);
     } else if (smaSeriesRef.current) {
@@ -163,6 +179,8 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     if (indicators.ema.enabled) {
       if (!emaSeriesRef.current) {
         emaSeriesRef.current = chartRef.current.addLineSeries({ color: indicators.ema.color, lineWidth: 2, lineStyle: 2, title: `EMA ${indicators.ema.period}` });
+      } else {
+        emaSeriesRef.current.applyOptions({ color: indicators.ema.color, title: `EMA ${indicators.ema.period}` });
       }
       emaSeriesRef.current.setData(calculateEMA(data, indicators.ema.period) as any);
     } else if (emaSeriesRef.current) {
@@ -195,7 +213,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       macdSignalSeriesRef.current.setData(macd.signal as any);
       macdHistogramSeriesRef.current.setData(macd.histogram.map(h => ({
         ...h,
-        color: h.value >= 0 ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+        color: h.value >= 0 ? 'rgba(38, 166, 154, 0.4)' : 'rgba(239, 83, 80, 0.4)'
       })) as any);
     } else if (macdSeriesRef.current) {
       chartRef.current.removeSeries(macdSeriesRef.current!);
@@ -213,14 +231,14 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     if (slLineRef.current) candlestickSeriesRef.current.removePriceLine(slLineRef.current);
     if (tpLineRef.current) candlestickSeriesRef.current.removePriceLine(tpLineRef.current);
 
-    if (signal) {
+    if (signal && data.length > 0) {
       const entryPrice = parseFloat(signal.entryZone.split('-')[0].trim()) || data[data.length-1].close;
       
       entryLineRef.current = candlestickSeriesRef.current.createPriceLine({
         price: entryPrice,
         color: '#4CC9F0',
         lineWidth: 2,
-        lineStyle: 0,
+        lineStyle: 2, // Dashed
         axisLabelVisible: true,
         title: 'Entry',
       });
@@ -229,7 +247,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
         price: signal.stopLoss,
         color: '#FF4D4D',
         lineWidth: 2,
-        lineStyle: 2,
+        lineStyle: 0, // Solid
         axisLabelVisible: true,
         title: 'SL',
       });
@@ -238,12 +256,12 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
         price: signal.takeProfit,
         color: '#4ADE80',
         lineWidth: 2,
-        lineStyle: 2,
+        lineStyle: 0, // Solid
         axisLabelVisible: true,
         title: 'TP',
       });
     }
-  }, [signal]);
+  }, [signal, data]);
 
   return <div ref={chartContainerRef} className="h-full w-full" />;
 });
