@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -22,8 +23,8 @@ import {
   generateMockForexData, 
   Candlestick, 
   detectPatterns, 
-  mapSymbolToFinnhub, 
-  mapTimeframeToResolution, 
+  mapSymbolToYahoo, 
+  mapTimeframeToYahooInterval, 
   calculateRSI, 
   calculateMACD,
   calculateEMA,
@@ -33,7 +34,7 @@ import {
 } from '@/lib/forex-data-utils';
 import { getExplainableTradeSignals } from '@/ai/flows/explainable-trade-signals';
 import { generateAnalysisAudio } from '@/ai/flows/analysis-tts';
-import { fetchFinnhubCandles } from '@/app/actions/market-data';
+import { fetchYahooCandles } from '@/app/actions/market-data';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -43,7 +44,7 @@ const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', 'D'];
 export default function DashboardPage() {
   const isMobile = useIsMobile();
   const [isMounted, setIsMounted] = useState(false);
-  const [activePair, setActivePair] = useState('XAUUSD');
+  const [activePair, setActivePair] = useState('EURUSD');
   const [activeTimeframe, setActiveTimeframe] = useState('1H');
   const [customAiInstructions, setCustomAiInstructions] = useState('');
   const [data, setData] = useState<Candlestick[]>([]);
@@ -79,24 +80,31 @@ export default function DashboardPage() {
     const savedHistory = localStorage.getItem('fx_session_history');
     if (savedHistory) setSignalHistory(JSON.parse(savedHistory));
     
-    const apiKey = localStorage.getItem('finnhub_api_key') || '';
-    fetchMarketNews(apiKey).then(setNews);
-    fetchEconomicCalendar(apiKey).then(setCalendar);
+    fetchMarketNews().then(setNews);
+    fetchEconomicCalendar().then(setCalendar);
   }, []);
 
   const loadMarketData = async () => {
-    const apiKey = typeof window !== 'undefined' ? localStorage.getItem('finnhub_api_key') : null;
     setIsLoadingData(true);
     try {
-      const symbol = mapSymbolToFinnhub(activePair);
-      const res = mapTimeframeToResolution(activeTimeframe);
-      const realData = apiKey ? await fetchFinnhubCandles(symbol, res, apiKey) : null;
-      if (realData && realData.length > 0) {
-        setData(realData); setIsRealData(true);
+      const symbol = mapSymbolToYahoo(activePair);
+      const interval = mapTimeframeToYahooInterval(activeTimeframe);
+      const yahooData = await fetchYahooCandles(symbol, interval);
+      
+      if (yahooData && yahooData.length > 0) {
+        setData(yahooData); 
+        setIsRealData(true);
       } else {
-        setData(generateMockForexData(getMockBasePrice(activePair), 150)); setIsRealData(false);
+        setData(generateMockForexData(getMockBasePrice(activePair), 150)); 
+        setIsRealData(false);
+        toast({
+          title: "Yahoo API Note",
+          description: "Falling back to simulation for this pair/timeframe.",
+          variant: "default"
+        });
       }
     } catch (error) {
+      console.error('Yahoo fetch error:', error);
       setData(generateMockForexData(getMockBasePrice(activePair), 150));
     } finally {
       setIsLoadingData(false);
@@ -106,6 +114,31 @@ export default function DashboardPage() {
   useEffect(() => { 
     if (isMounted) loadMarketData(); 
   }, [activePair, activeTimeframe, isMounted]);
+
+  // Real-time polling simulation for Yahoo
+  useEffect(() => {
+    if (!isRealData) return;
+    
+    const interval = setInterval(async () => {
+      const symbol = mapSymbolToYahoo(activePair);
+      const yahooData = await fetchYahooCandles(symbol, mapTimeframeToYahooInterval(activeTimeframe));
+      if (yahooData && yahooData.length > 0) {
+        setData(prev => {
+          const lastPrev = prev[prev.length - 1];
+          const lastNew = yahooData[yahooData.length - 1];
+          if (lastNew.time === lastPrev.time) {
+            // Update last candle
+            return [...prev.slice(0, -1), lastNew];
+          } else {
+            // Append new candle
+            return [...prev, lastNew].slice(-500);
+          }
+        });
+      }
+    }, 15000); // Poll every 15 seconds for "real-time" feel
+    
+    return () => clearInterval(interval);
+  }, [isRealData, activePair, activeTimeframe]);
 
   const togglePanel = (tab: string) => {
     if (showSidePanel && activePanelTab === tab) {
@@ -126,10 +159,10 @@ export default function DashboardPage() {
     setShowSidePanel(true);
 
     try {
-      const apiKey = localStorage.getItem('finnhub_api_key') || '';
-      const symbol = mapSymbolToFinnhub(activePair);
+      const symbol = mapSymbolToYahoo(activePair);
       
-      const dailyData = apiKey ? await fetchFinnhubCandles(symbol, 'D', apiKey) : generateMockForexData(getMockBasePrice(activePair), 50);
+      // Fetch institutional trend (Daily)
+      const dailyData = await fetchYahooCandles(symbol, '1d');
       let dailyTrend: 'Bullish' | 'Bearish' | 'Neutral' = 'Neutral';
       if (dailyData && dailyData.length >= 20) {
         const ema20 = calculateEMA(dailyData, 20);
@@ -159,7 +192,7 @@ export default function DashboardPage() {
         })),
         correlationData: { 
           dailyTrend, 
-          summary: `Institutional correlation check: The Daily ${dailyTrend} trend provides ${dailyTrend === 'Bullish' ? 'support' : 'resistance'} context for this ${activeTimeframe} setup.` 
+          summary: `Yahoo Finance Correlation: The Daily ${dailyTrend} trend provides institutional context for this ${activeTimeframe} setup.` 
         },
         newsContext: news.slice(0, 3).map(n => n.headline),
         indicators: {
@@ -181,7 +214,7 @@ export default function DashboardPage() {
       setSignal(prev => prev ? { ...prev, audioUri: audioResult.audioDataUri } : undefined);
     } catch (error) {
       console.error('Analysis failed:', error);
-      toast({ title: "Analysis Failed", description: "Market connectivity issue or API limit reached.", variant: "destructive" });
+      toast({ title: "Analysis Failed", description: "AI analysis could not be completed at this time.", variant: "destructive" });
     } finally {
       setIsAnalyzing(false); setIsGeneratingAudio(false);
     }
@@ -199,7 +232,10 @@ export default function DashboardPage() {
         <header className="h-12 border-b flex items-center justify-between px-4 bg-card/50 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => setShowWatchlist(!showWatchlist)}><PanelLeft className="h-4 w-4" /></Button>
-            <span className="text-sm font-bold">{activePair}</span>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold leading-none">{activePair}</span>
+              <span className="text-[9px] font-bold text-muted-foreground uppercase">Yahoo Market</span>
+            </div>
             <Tabs value={activeTimeframe} onValueChange={setActiveTimeframe}>
               <TabsList className="bg-transparent h-8 gap-1 hidden sm:flex">
                 {TIMEFRAMES.map(tf => (
@@ -225,14 +261,17 @@ export default function DashboardPage() {
           {isLoadingData && (
             <div className="absolute inset-0 z-50 bg-background/50 backdrop-blur-sm flex flex-col items-center justify-center">
               <RefreshCw className="w-8 h-8 text-primary animate-spin mb-2" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Syncing Data...</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">Fetching Yahoo Data...</span>
             </div>
           )}
           <TradingChart ref={chartRef} data={data} indicators={indicators} signal={signal} symbol={activePair} timeframe={activeTimeframe} />
         </div>
 
         <footer className="h-8 border-t bg-card/50 flex items-center justify-between px-4 text-[9px] font-bold text-muted-foreground uppercase">
-          <div className="flex items-center gap-2"><div className={cn("w-1.5 h-1.5 rounded-full", isRealData ? "bg-green-500" : "bg-blue-500")} /> {isRealData ? "Live Data" : "Simulator Mode"}</div>
+          <div className="flex items-center gap-2">
+            <div className={cn("w-1.5 h-1.5 rounded-full", isRealData ? "bg-green-500" : "bg-blue-500")} /> 
+            {isRealData ? "Yahoo Live" : "Simulator Mode"}
+          </div>
           <div className="flex items-center gap-4">
              {news.length > 0 && <div className="flex items-center gap-2 hidden lg:flex"><Newspaper className="w-3 h-3" /> <span className="truncate max-w-[300px]">{news[0].headline}</span></div>}
              <div className="flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 text-destructive" /> <span>High Risk Disclosure</span></div>
