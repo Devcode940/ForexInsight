@@ -29,11 +29,10 @@ export function getMockBasePrice(pair: string): number {
 }
 
 /**
- * Maps a currency pair or commodity to its Yahoo Finance symbol.
+ * Maps standard pairs to Yahoo Finance symbols.
  */
 export function mapSymbolToYahoo(pair: string): string {
   if (pair.includes('=X') || pair.includes('=F')) return pair;
-  
   const map: Record<string, string> = {
     'EURUSD': 'EURUSD=X',
     'GBPUSD': 'GBPUSD=X',
@@ -42,42 +41,41 @@ export function mapSymbolToYahoo(pair: string): string {
     'AUDUSD': 'AUDUSD=X',
     'USDCAD': 'USDCAD=X',
     'NZDUSD': 'NZDUSD=X',
-    'XAUUSD': 'GC=F', // Gold Futures
-    'XAGUSD': 'SI=F', // Silver Futures
+    'XAUUSD': 'GC=F',
+    'XAGUSD': 'SI=F',
     'EURJPY': 'EURJPY=X',
     'GBPJPY': 'GBPJPY=X',
     'EURGBP': 'EURGBP=X'
   };
-  
   return map[pair] || `${pair}=X`;
 }
 
 /**
- * Maps dashboard timeframe names to Yahoo Finance intervals.
+ * Maps standard pairs to Finnhub symbols (usually identical for Forex).
  */
-export function mapTimeframeToYahooInterval(tf: string): string {
+export function mapSymbolToFinnhub(pair: string): string {
   const map: Record<string, string> = {
-    '1m': '1m',
-    '5m': '5m',
-    '15m': '15m',
-    '30m': '30m',
-    '1H': '1h',
-    'D': '1d',
-    'W': '1wk',
-    'M': '1mo'
+    'XAUUSD': 'OANDA:XAU_USD',
+    'XAGUSD': 'OANDA:XAG_USD',
   };
-  return map[tf] || '1h';
+  return map[pair] || `FX:${pair}`;
 }
 
 /**
- * Deprecated mapping for Finnhub. Keeping signature compatibility for safety.
+ * Maps standard pairs to Alpha Vantage symbols.
  */
-export function mapSymbolToFinnhub(pair: string): string {
-  return mapSymbolToYahoo(pair);
+export function mapSymbolToAlphaVantage(pair: string): { from: string, to: string } {
+  if (pair.length === 6) {
+    return { from: pair.slice(0, 3), to: pair.slice(3) };
+  }
+  return { from: pair, to: 'USD' };
 }
 
-export function mapTimeframeToResolution(tf: string): string {
-  return mapTimeframeToYahooInterval(tf);
+export function mapTimeframeToYahooInterval(tf: string): string {
+  const map: Record<string, string> = {
+    '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m', '1H': '1h', 'D': '1d'
+  };
+  return map[tf] || '1h';
 }
 
 export function generateMockForexData(basePrice: number, count: number = 200): Candlestick[] {
@@ -193,8 +191,7 @@ export function detectPatterns(data: Candlestick[]) {
   return markers;
 }
 
-export async function fetchMarketNews(apiKey?: string) {
-  // Use a public news source or simulator
+export async function fetchMarketNews() {
   return [
     { headline: "Yahoo Market Update: Dollar steady ahead of PCE inflation data.", datetime: Date.now() / 1000 },
     { headline: "Gold hits new highs as central bank buying continues.", datetime: Date.now() / 1000 - 3600 },
@@ -202,7 +199,7 @@ export async function fetchMarketNews(apiKey?: string) {
   ];
 }
 
-export async function fetchEconomicCalendar(apiKey?: string) {
+export async function fetchEconomicCalendar() {
   return [
     { country: 'USD', event: 'PCE Price Index (MoM)', impact: 'high', time: new Date().toISOString(), prev: '0.3%', estimate: '0.2%' },
     { country: 'EUR', event: 'Consumer Confidence', impact: 'medium', time: new Date().toISOString(), prev: '-15.5', estimate: '-15.0' }
