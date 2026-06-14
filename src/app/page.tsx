@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WatchlistSidebar } from '@/components/watchlist-sidebar';
 import { TradingChart, TradingChartHandle } from '@/components/trading-chart';
 import { AnalysisPanel } from '@/components/analysis-panel';
-import { IndicatorSettingsSidebar, IndicatorsState } from '@/components/indicator-settings-sidebar';
+import { IndicatorsState } from '@/components/indicator-settings-sidebar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
@@ -14,7 +14,9 @@ import {
   MessageSquare,
   RefreshCw,
   AlertTriangle,
-  Newspaper
+  Newspaper,
+  Calculator,
+  Calendar as CalendarIcon
 } from 'lucide-react';
 import { 
   generateMockForexData, 
@@ -53,8 +55,8 @@ export default function DashboardPage() {
   const { toast } = useToast();
   
   const [showWatchlist, setShowWatchlist] = useState(true);
-  const [showAnalysisPanel, setShowAnalysisPanel] = useState(true);
-  const [showIndicatorSettings, setShowIndicatorSettings] = useState(false);
+  const [showSidePanel, setShowSidePanel] = useState(true);
+  const [activePanelTab, setActivePanelTab] = useState('analysis');
 
   const [indicators, setIndicators] = useState<IndicatorsState>({
     sma: { enabled: true, period: 20, color: '#3A86FF' },
@@ -105,19 +107,28 @@ export default function DashboardPage() {
     if (isMounted) loadMarketData(); 
   }, [activePair, activeTimeframe, isMounted]);
 
+  const togglePanel = (tab: string) => {
+    if (showSidePanel && activePanelTab === tab) {
+      setShowSidePanel(false);
+    } else {
+      setActivePanelTab(tab);
+      setShowSidePanel(true);
+    }
+  };
+
   const runAnalysis = async () => {
     let recentCandles = chartRef.current?.getVisibleData() || [];
     if (recentCandles.length < 10) recentCandles = data.slice(-100);
     if (recentCandles.length < 10) return;
     
     setIsAnalyzing(true);
-    if (isMobile) setShowAnalysisPanel(true);
+    setActivePanelTab('analysis');
+    setShowSidePanel(true);
 
     try {
       const apiKey = localStorage.getItem('finnhub_api_key') || '';
       const symbol = mapSymbolToFinnhub(activePair);
       
-      // Enhanced MTF Trend logic: Fetch Daily EMA 20
       const dailyData = apiKey ? await fetchFinnhubCandles(symbol, 'D', apiKey) : generateMockForexData(getMockBasePrice(activePair), 50);
       let dailyTrend: 'Bullish' | 'Bearish' | 'Neutral' = 'Neutral';
       if (dailyData && dailyData.length >= 20) {
@@ -130,7 +141,6 @@ export default function DashboardPage() {
       const localPatterns = detectPatterns(recentCandles);
       const patternNames = Array.from(new Set(localPatterns.map(p => p.text)));
       
-      // Signal Precision: Use current Visible Data indicators
       const rsiResults = calculateRSI(recentCandles, indicators.rsi.period);
       const currentRsi = rsiResults.length > 0 ? rsiResults[rsiResults.length - 1].value : null;
       
@@ -198,13 +208,16 @@ export default function DashboardPage() {
               </TabsList>
             </Tabs>
           </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={runAnalysis} disabled={isAnalyzing} className="h-8 text-[10px] font-bold uppercase bg-primary">
+          <div className="flex items-center gap-1.5">
+            <Button onClick={runAnalysis} disabled={isAnalyzing} className="h-8 text-[10px] font-bold uppercase bg-primary hover:bg-primary/90">
               <Zap className={cn("w-3.5 h-3.5 mr-1.5", isAnalyzing && "animate-pulse")} />
               {isAnalyzing ? "Analyzing" : "AI Multi-TF Analysis"}
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => { setShowIndicatorSettings(!showIndicatorSettings); setShowAnalysisPanel(false); }}><Settings2 className="w-4 h-4" /></Button>
-            <Button variant="ghost" size="icon" onClick={() => { setShowAnalysisPanel(!showAnalysisPanel); setShowIndicatorSettings(false); }}><MessageSquare className="w-4 h-4" /></Button>
+            <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
+            <Button variant="ghost" size="icon" className={cn("h-8 w-8", activePanelTab === 'indicators' && showSidePanel && "bg-accent")} onClick={() => togglePanel('indicators')}><Settings2 className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="icon" className={cn("h-8 w-8", activePanelTab === 'tools' && showSidePanel && "bg-accent")} onClick={() => togglePanel('tools')}><Calculator className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="icon" className={cn("h-8 w-8", activePanelTab === 'calendar' && showSidePanel && "bg-accent")} onClick={() => togglePanel('calendar')}><CalendarIcon className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="icon" className={cn("h-8 w-8", activePanelTab === 'analysis' && showSidePanel && "bg-accent")} onClick={() => togglePanel('analysis')}><MessageSquare className="w-4 h-4" /></Button>
           </div>
         </header>
 
@@ -221,15 +234,28 @@ export default function DashboardPage() {
         <footer className="h-8 border-t bg-card/50 flex items-center justify-between px-4 text-[9px] font-bold text-muted-foreground uppercase">
           <div className="flex items-center gap-2"><div className={cn("w-1.5 h-1.5 rounded-full", isRealData ? "bg-green-500" : "bg-blue-500")} /> {isRealData ? "Live Data" : "Simulator Mode"}</div>
           <div className="flex items-center gap-4">
-             {news.length > 0 && <div className="flex items-center gap-2"><Newspaper className="w-3 h-3" /> <span className="truncate max-w-[300px]">{news[0].headline}</span></div>}
+             {news.length > 0 && <div className="flex items-center gap-2 hidden lg:flex"><Newspaper className="w-3 h-3" /> <span className="truncate max-w-[300px]">{news[0].headline}</span></div>}
              <div className="flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 text-destructive" /> <span>High Risk Disclosure</span></div>
           </div>
         </footer>
       </main>
 
-      <aside className={cn("z-40 transition-all duration-300", isMobile ? "fixed inset-y-0 right-0 shadow-2xl" : "relative border-l", (showIndicatorSettings || showAnalysisPanel) ? "w-80" : "w-0 overflow-hidden")}>
-        {showIndicatorSettings && <IndicatorSettingsSidebar indicators={indicators} setIndicators={setIndicators} customAiInstructions={customAiInstructions} setCustomAiInstructions={setCustomAiInstructions} onClose={() => setShowIndicatorSettings(false)} />}
-        {showAnalysisPanel && <AnalysisPanel signal={signal} history={signalHistory} calendar={calendar} isLoading={isAnalyzing} isGeneratingAudio={isGeneratingAudio} onSelectFromHistory={(sig) => { setSignal(sig); setActivePair(sig.pair); setActiveTimeframe(sig.timeframe); }} onClose={() => setShowAnalysisPanel(false)} />}
+      <aside className={cn("z-40 transition-all duration-300", isMobile ? "fixed inset-y-0 right-0 shadow-2xl" : "relative border-l", showSidePanel ? "w-80" : "w-0 overflow-hidden")}>
+        <AnalysisPanel 
+          signal={signal} 
+          history={signalHistory} 
+          calendar={calendar} 
+          isLoading={isAnalyzing} 
+          isGeneratingAudio={isGeneratingAudio} 
+          onSelectFromHistory={(sig) => { setSignal(sig); setActivePair(sig.pair); setActiveTimeframe(sig.timeframe); }} 
+          onClose={() => setShowSidePanel(false)} 
+          activeTab={activePanelTab}
+          onTabChange={setActivePanelTab}
+          indicators={indicators}
+          setIndicators={setIndicators}
+          customAiInstructions={customAiInstructions}
+          setCustomAiInstructions={setCustomAiInstructions}
+        />
       </aside>
     </div>
   );
