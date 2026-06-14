@@ -26,7 +26,8 @@ import {
   calculateMACD,
   calculateEMA,
   getMockBasePrice,
-  fetchMarketNews
+  fetchMarketNews,
+  fetchEconomicCalendar
 } from '@/lib/forex-data-utils';
 import { getExplainableTradeSignals } from '@/ai/flows/explainable-trade-signals';
 import { generateAnalysisAudio } from '@/ai/flows/analysis-tts';
@@ -39,11 +40,13 @@ const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', 'D'];
 
 export default function DashboardPage() {
   const isMobile = useIsMobile();
+  const [isMounted, setIsMounted] = useState(false);
   const [activePair, setActivePair] = useState('XAUUSD');
   const [activeTimeframe, setActiveTimeframe] = useState('1H');
   const [customAiInstructions, setCustomAiInstructions] = useState('');
   const [data, setData] = useState<Candlestick[]>([]);
   const [news, setNews] = useState<any[]>([]);
+  const [calendar, setCalendar] = useState<any[]>([]);
   const [isRealData, setIsRealData] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const chartRef = useRef<TradingChartHandle>(null);
@@ -70,15 +73,17 @@ export default function DashboardPage() {
   const [signalHistory, setSignalHistory] = useState<any[]>([]);
 
   useEffect(() => {
+    setIsMounted(true);
     const savedHistory = localStorage.getItem('fx_session_history');
     if (savedHistory) setSignalHistory(JSON.parse(savedHistory));
     
     const apiKey = localStorage.getItem('finnhub_api_key') || '';
     fetchMarketNews(apiKey).then(setNews);
+    fetchEconomicCalendar(apiKey).then(setCalendar);
   }, []);
 
   const loadMarketData = async () => {
-    const apiKey = localStorage.getItem('finnhub_api_key');
+    const apiKey = typeof window !== 'undefined' ? localStorage.getItem('finnhub_api_key') : null;
     setIsLoadingData(true);
     try {
       const symbol = mapSymbolToFinnhub(activePair);
@@ -96,7 +101,9 @@ export default function DashboardPage() {
     }
   };
 
-  useEffect(() => { loadMarketData(); }, [activePair, activeTimeframe]);
+  useEffect(() => { 
+    if (isMounted) loadMarketData(); 
+  }, [activePair, activeTimeframe, isMounted]);
 
   const runAnalysis = async () => {
     let recentCandles = chartRef.current?.getVisibleData() || [];
@@ -110,7 +117,7 @@ export default function DashboardPage() {
       const apiKey = localStorage.getItem('finnhub_api_key') || '';
       const symbol = mapSymbolToFinnhub(activePair);
       
-      // Multi-timeframe trend calculation using Daily EMA 20
+      // Enhanced MTF Trend logic: Fetch Daily EMA 20
       const dailyData = apiKey ? await fetchFinnhubCandles(symbol, 'D', apiKey) : generateMockForexData(getMockBasePrice(activePair), 50);
       let dailyTrend: 'Bullish' | 'Bearish' | 'Neutral' = 'Neutral';
       if (dailyData && dailyData.length >= 20) {
@@ -123,7 +130,7 @@ export default function DashboardPage() {
       const localPatterns = detectPatterns(recentCandles);
       const patternNames = Array.from(new Set(localPatterns.map(p => p.text)));
       
-      // Calculate real indicators based on current visible range data
+      // Signal Precision: Use current Visible Data indicators
       const rsiResults = calculateRSI(recentCandles, indicators.rsi.period);
       const currentRsi = rsiResults.length > 0 ? rsiResults[rsiResults.length - 1].value : null;
       
@@ -142,7 +149,7 @@ export default function DashboardPage() {
         })),
         correlationData: { 
           dailyTrend, 
-          summary: `The higher timeframe institutional trend is currently ${dailyTrend} based on the Daily EMA 20.` 
+          summary: `Institutional correlation check: The Daily ${dailyTrend} trend provides ${dailyTrend === 'Bullish' ? 'support' : 'resistance'} context for this ${activeTimeframe} setup.` 
         },
         newsContext: news.slice(0, 3).map(n => n.headline),
         indicators: {
@@ -164,11 +171,13 @@ export default function DashboardPage() {
       setSignal(prev => prev ? { ...prev, audioUri: audioResult.audioDataUri } : undefined);
     } catch (error) {
       console.error('Analysis failed:', error);
-      toast({ title: "Analysis Failed", variant: "destructive" });
+      toast({ title: "Analysis Failed", description: "Market connectivity issue or API limit reached.", variant: "destructive" });
     } finally {
       setIsAnalyzing(false); setIsGeneratingAudio(false);
     }
   };
+
+  if (!isMounted) return null;
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden relative">
@@ -220,7 +229,7 @@ export default function DashboardPage() {
 
       <aside className={cn("z-40 transition-all duration-300", isMobile ? "fixed inset-y-0 right-0 shadow-2xl" : "relative border-l", (showIndicatorSettings || showAnalysisPanel) ? "w-80" : "w-0 overflow-hidden")}>
         {showIndicatorSettings && <IndicatorSettingsSidebar indicators={indicators} setIndicators={setIndicators} customAiInstructions={customAiInstructions} setCustomAiInstructions={setCustomAiInstructions} onClose={() => setShowIndicatorSettings(false)} />}
-        {showAnalysisPanel && <AnalysisPanel signal={signal} history={signalHistory} isLoading={isAnalyzing} isGeneratingAudio={isGeneratingAudio} onSelectFromHistory={(sig) => { setSignal(sig); setActivePair(sig.pair); setActiveTimeframe(sig.timeframe); }} onClose={() => setShowAnalysisPanel(false)} />}
+        {showAnalysisPanel && <AnalysisPanel signal={signal} history={signalHistory} calendar={calendar} isLoading={isAnalyzing} isGeneratingAudio={isGeneratingAudio} onSelectFromHistory={(sig) => { setSignal(sig); setActivePair(sig.pair); setActiveTimeframe(sig.timeframe); }} onClose={() => setShowAnalysisPanel(false)} />}
       </aside>
     </div>
   );

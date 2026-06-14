@@ -164,3 +164,31 @@ export async function fetchMarketNews(apiKey: string) {
     return [];
   }
 }
+
+export async function fetchEconomicCalendar(apiKey: string) {
+  if (!apiKey) return [];
+  try {
+    const today = new Date();
+    const from = today.toISOString().split('T')[0];
+    const nextWeek = new Date(today.getTime() + 7 * 86400000);
+    const to = nextWeek.toISOString().split('T')[0];
+    const res = await fetch(`https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${to}&token=${apiKey}`);
+    const data = await res.json();
+    return data.economicCalendar || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function calculatePositionSize(
+  balance: number,
+  riskPercent: number,
+  stopLossPips: number,
+  isJpy: boolean = false
+) {
+  if (stopLossPips <= 0) return 0;
+  const amountToRisk = balance * (riskPercent / 100);
+  const pipValuePerStandardLot = isJpy ? 6.70 : 10.00; // Simplified approximate pip values for USD account
+  const lotSize = amountToRisk / (stopLossPips * pipValuePerStandardLot);
+  return Number(lotSize.toFixed(2));
+}
