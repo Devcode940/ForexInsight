@@ -24,6 +24,7 @@ import {
   mapTimeframeToResolution, 
   calculateRSI, 
   calculateMACD,
+  calculateEMA,
   getMockBasePrice,
   fetchMarketNews
 } from '@/lib/forex-data-utils';
@@ -109,13 +110,29 @@ export default function DashboardPage() {
       const apiKey = localStorage.getItem('finnhub_api_key') || '';
       const symbol = mapSymbolToFinnhub(activePair);
       
+      // Multi-timeframe trend calculation using Daily EMA 20
       const dailyData = apiKey ? await fetchFinnhubCandles(symbol, 'D', apiKey) : generateMockForexData(getMockBasePrice(activePair), 50);
-      const dailyTrend = dailyData && dailyData.length > 1 ? (dailyData[dailyData.length-1].close > dailyData[dailyData.length-2].close ? 'Bullish' : 'Bearish') : 'Neutral';
+      let dailyTrend: 'Bullish' | 'Bearish' | 'Neutral' = 'Neutral';
+      if (dailyData && dailyData.length >= 20) {
+        const ema20 = calculateEMA(dailyData, 20);
+        const lastPrice = dailyData[dailyData.length - 1].close;
+        const lastEma = ema20[ema20.length - 1].value;
+        dailyTrend = lastPrice > lastEma ? 'Bullish' : 'Bearish';
+      }
 
       const localPatterns = detectPatterns(recentCandles);
       const patternNames = Array.from(new Set(localPatterns.map(p => p.text)));
-      const currentRsi = calculateRSI(recentCandles, indicators.rsi.period).slice(-1)[0]?.value;
-      const currentMacd = calculateMACD(recentCandles);
+      
+      // Calculate real indicators based on current visible range data
+      const rsiResults = calculateRSI(recentCandles, indicators.rsi.period);
+      const currentRsi = rsiResults.length > 0 ? rsiResults[rsiResults.length - 1].value : null;
+      
+      const macdResults = calculateMACD(recentCandles);
+      const currentMacd = macdResults.line.length > 0 ? {
+        line: macdResults.line[macdResults.line.length - 1].value,
+        signal: macdResults.signal[macdResults.signal.length - 1].value,
+        histogram: macdResults.histogram[macdResults.histogram.length - 1].value,
+      } : undefined;
 
       const result = await getExplainableTradeSignals({
         currencyPair: activePair,
@@ -123,15 +140,14 @@ export default function DashboardPage() {
         candles: recentCandles.slice(-100).map(c => ({
           open: c.open, high: c.high, low: c.low, close: c.close, timestamp: Number(c.time) * 1000
         })),
-        correlationData: { dailyTrend, summary: `Market is primarily ${dailyTrend} on the Daily chart.` },
+        correlationData: { 
+          dailyTrend, 
+          summary: `The higher timeframe institutional trend is currently ${dailyTrend} based on the Daily EMA 20.` 
+        },
         newsContext: news.slice(0, 3).map(n => n.headline),
         indicators: {
           rsi: currentRsi,
-          macd: currentMacd.line.length > 0 ? {
-            line: currentMacd.line.slice(-1)[0].value,
-            signal: currentMacd.signal.slice(-1)[0].value,
-            histogram: currentMacd.histogram.slice(-1)[0].value,
-          } : undefined
+          macd: currentMacd
         },
         detectedPatterns: patternNames,
         customInstructions: customAiInstructions
@@ -147,6 +163,7 @@ export default function DashboardPage() {
       const audioResult = await generateAnalysisAudio({ text: result.reasoning });
       setSignal(prev => prev ? { ...prev, audioUri: audioResult.audioDataUri } : undefined);
     } catch (error) {
+      console.error('Analysis failed:', error);
       toast({ title: "Analysis Failed", variant: "destructive" });
     } finally {
       setIsAnalyzing(false); setIsGeneratingAudio(false);
@@ -177,8 +194,8 @@ export default function DashboardPage() {
               <Zap className={cn("w-3.5 h-3.5 mr-1.5", isAnalyzing && "animate-pulse")} />
               {isAnalyzing ? "Analyzing" : "AI Multi-TF Analysis"}
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setShowIndicatorSettings(!showIndicatorSettings)}><Settings2 className="w-4 h-4" /></Button>
-            <Button variant="ghost" size="icon" onClick={() => setShowAnalysisPanel(!showAnalysisPanel)}><MessageSquare className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => { setShowIndicatorSettings(!showIndicatorSettings); setShowAnalysisPanel(false); }}><Settings2 className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => { setShowAnalysisPanel(!showAnalysisPanel); setShowIndicatorSettings(false); }}><MessageSquare className="w-4 h-4" /></Button>
           </div>
         </header>
 
@@ -193,10 +210,10 @@ export default function DashboardPage() {
         </div>
 
         <footer className="h-8 border-t bg-card/50 flex items-center justify-between px-4 text-[9px] font-bold text-muted-foreground uppercase">
-          <div className="flex items-center gap-2"><div className={cn("w-1.5 h-1.5 rounded-full", isRealData ? "bg-green-500" : "bg-blue-500")} /> {isRealData ? "Live" : "Demo"}</div>
+          <div className="flex items-center gap-2"><div className={cn("w-1.5 h-1.5 rounded-full", isRealData ? "bg-green-500" : "bg-blue-500")} /> {isRealData ? "Live Data" : "Simulator Mode"}</div>
           <div className="flex items-center gap-4">
              {news.length > 0 && <div className="flex items-center gap-2"><Newspaper className="w-3 h-3" /> <span className="truncate max-w-[300px]">{news[0].headline}</span></div>}
-             <div className="flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 text-destructive" /> <span>Risk Warning</span></div>
+             <div className="flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 text-destructive" /> <span>High Risk Disclosure</span></div>
           </div>
         </footer>
       </main>

@@ -141,6 +141,7 @@ export function detectPatterns(data: Candlestick[]) {
     const prev2 = data[i - 2], prev = data[i - 1], curr = data[i];
     const bodySize = Math.abs(curr.close - curr.open), totalSize = curr.high - curr.low;
     const upperWick = curr.high - Math.max(curr.open, curr.close), lowerWick = Math.min(curr.open, curr.close) - curr.low;
+    
     if (prev.close < prev.open && curr.close > curr.open && curr.open <= prev.close && curr.close >= prev.open) {
       markers.push({ time: curr.time, position: 'belowBar', color: '#4ade80', shape: 'arrowUp', text: 'Bullish Engulfing' });
     }
@@ -155,7 +156,7 @@ export function detectPatterns(data: Candlestick[]) {
 }
 
 export async function fetchMarketNews(apiKey: string) {
-  if (!apiKey) return [{ headline: "Simulator: Fed likely to hold rates steady", datetime: Date.now() / 1000 }];
+  if (!apiKey) return [{ headline: "Simulator: Market awaiting key central bank data", datetime: Date.now() / 1000 }];
   try {
     const res = await fetch(`https://finnhub.io/api/v1/news?category=forex&token=${apiKey}`);
     return await res.json();
