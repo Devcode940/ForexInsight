@@ -17,8 +17,9 @@ import {
 import { Candlestick, detectPatterns, calculateRSI, calculateSMA, calculateEMA, calculateMACD } from '@/lib/forex-data-utils';
 import { IndicatorsState } from '@/components/indicator-settings-sidebar';
 import { Button } from '@/components/ui/button';
-import { Trash2, Hash } from 'lucide-react';
+import { Trash2, Hash, ArrowDownNarrowWide, Maximize2, Eraser } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface TradingChartProps {
   data: Candlestick[];
@@ -49,7 +50,8 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
   const slLineRef = useRef<IPriceLine | null>(null);
   const tpLineRef = useRef<IPriceLine | null>(null);
 
-  const [drawMode, setDrawMode] = useState<'none' | 'hline'>('none');
+  const manualLinesRef = useRef<IPriceLine[]>([]);
+  const [drawMode, setDrawMode] = useState<'none' | 'hline' | 'vline'>('none');
 
   useImperativeHandle(ref, () => ({
     resetView: () => chartRef.current?.timeScale().fitContent(),
@@ -62,6 +64,14 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       return data.slice(startIdx, endIdx + 1);
     }
   }));
+
+  const clearManualDrawings = () => {
+    if (!mainSeriesRef.current) return;
+    manualLinesRef.current.forEach(line => {
+      try { mainSeriesRef.current?.removePriceLine(line); } catch (e) {}
+    });
+    manualLinesRef.current = [];
+  };
 
   // Initialize Chart
   useEffect(() => {
@@ -78,10 +88,10 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
 
     chart.applyOptions({
       watermark: { 
-        color: 'rgba(255, 255, 255, 0.05)', 
+        color: 'rgba(255, 255, 255, 0.03)', 
         visible: true, 
-        text: `${symbol} • ${timeframe} • INSTITUTIONAL`, 
-        fontSize: 32, 
+        text: `${symbol} • ${timeframe} • ANALYSIS MODE`, 
+        fontSize: 24, 
         horzAlign: 'center', 
         vertAlign: 'center' 
       },
@@ -98,10 +108,13 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     volumeSeriesRef.current = volumeSeries;
 
     const handleChartClick = (param: MouseEventParams) => {
-      if (drawMode === 'hline' && param.price && mainSeriesRef.current) {
-        mainSeriesRef.current.createPriceLine({
-          price: param.price, color: '#94a3b8', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Manual Level'
+      if (!mainSeriesRef.current || !param.price) return;
+
+      if (drawMode === 'hline') {
+        const line = mainSeriesRef.current.createPriceLine({
+          price: param.price, color: '#3A86FF', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Analysis Level'
         });
+        manualLinesRef.current.push(line);
         setDrawMode('none');
       }
     };
@@ -119,34 +132,18 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       resizeObserver.disconnect();
       chart.unsubscribeClick(handleChartClick);
       chart.remove();
-      // Nullify all refs on cleanup to prevent stale references causing crashes in other effects
       chartRef.current = null;
       mainSeriesRef.current = null;
       volumeSeriesRef.current = null;
-      smaSeriesRef.current = null;
-      emaSeriesRef.current = null;
-      rsiSeriesRef.current = null;
-      macdSeriesRef.current = null;
-      macdSignalSeriesRef.current = null;
-      macdHistogramSeriesRef.current = null;
-      entryLineRef.current = null;
-      slLineRef.current = null;
-      tpLineRef.current = null;
     };
   }, [symbol, timeframe, drawMode]);
 
-  // Handle Main Series (Candle/Line toggle)
+  // Handle Main Series
   useEffect(() => {
     if (!chartRef.current) return;
     
-    // Safety: only remove if it's assigned and we didn't just nullify it in chart init cleanup
     if (mainSeriesRef.current) {
-      try {
-        chartRef.current.removeSeries(mainSeriesRef.current);
-      } catch (e) {
-        // Silently fail if series doesn't belong to current chart instance
-      }
-      mainSeriesRef.current = null;
+      try { chartRef.current.removeSeries(mainSeriesRef.current); } catch (e) {}
     }
 
     if (indicators.chartType === 'line') {
@@ -158,7 +155,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     }
   }, [indicators.chartType, symbol]);
 
-  // Update Data and Markers
+  // Update Data
   useEffect(() => {
     if (mainSeriesRef.current && data.length > 0) {
       if (indicators.chartType === 'line') {
@@ -179,10 +176,9 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     }
   }, [data, indicators.showPatternLabels, indicators.chartType]);
 
-  // Handle Indicators
+  // Indicators
   useEffect(() => {
     if (!chartRef.current || data.length === 0) return;
-    
     const chart = chartRef.current;
 
     // SMA
@@ -234,8 +230,6 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
         chart.removeSeries(macdHistogramSeriesRef.current!);
       } catch(e) {}
       macdSeriesRef.current = null;
-      macdSignalSeriesRef.current = null;
-      macdHistogramSeriesRef.current = null;
     }
   }, [indicators, data]);
 
@@ -244,9 +238,9 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     if (!mainSeriesRef.current) return;
     const series = mainSeriesRef.current;
 
-    if (entryLineRef.current) series.removePriceLine(entryLineRef.current);
-    if (slLineRef.current) series.removePriceLine(slLineRef.current);
-    if (tpLineRef.current) series.removePriceLine(tpLineRef.current);
+    if (entryLineRef.current) try { series.removePriceLine(entryLineRef.current); } catch(e) {}
+    if (slLineRef.current) try { series.removePriceLine(slLineRef.current); } catch(e) {}
+    if (tpLineRef.current) try { series.removePriceLine(tpLineRef.current); } catch(e) {}
 
     if (signal && data.length > 0) {
       const entryPrice = parseFloat(signal.entryZone?.split('-')[0]) || data[data.length-1].close;
@@ -257,23 +251,51 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
   }, [signal, data]);
 
   return (
-    <div className="relative h-full w-full">
-      <div className="absolute left-4 top-4 z-10 flex flex-col gap-2 p-1 bg-background/50 backdrop-blur-md rounded-lg border border-border/30">
-        <Button 
-          variant="ghost" size="icon" className={cn("h-8 w-8", drawMode === 'hline' && "bg-primary/20 text-primary")}
-          onClick={() => setDrawMode(drawMode === 'hline' ? 'none' : 'hline')}
-        >
-          <Hash className="h-4 w-4" />
-        </Button>
-        <Button 
-          variant="ghost" size="icon" className="h-8 w-8 text-destructive"
-          onClick={() => {
-            if (!chartRef.current || !mainSeriesRef.current) return;
-            window.location.reload(); 
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+    <div className="relative h-full w-full group">
+      <div className="absolute left-4 top-4 z-10 flex flex-col gap-2 p-1 bg-background/50 backdrop-blur-md rounded-lg border border-border/30 opacity-0 group-hover:opacity-100 transition-opacity">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" size="icon" className={cn("h-8 w-8", drawMode === 'hline' && "bg-primary text-primary-foreground")}
+                onClick={() => setDrawMode(drawMode === 'hline' ? 'none' : 'hline')}
+              >
+                <Hash className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Horizontal Analysis Level</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={clearManualDrawings}>
+                <Eraser className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Clear Manual Drawings</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => chartRef.current?.timeScale().fitContent()}>
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Fit to Screen</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" size="icon" className="h-8 w-8 text-destructive"
+                onClick={() => window.location.reload()}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Reset Session</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
       <div ref={chartContainerRef} className="h-full w-full" />
     </div>

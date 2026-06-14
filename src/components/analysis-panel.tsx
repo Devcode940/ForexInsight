@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -16,7 +17,9 @@ import {
   Calculator,
   Calendar as CalendarIcon,
   Flag,
-  ChevronRight
+  ChevronRight,
+  History as HistoryIcon,
+  Play
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -98,9 +101,11 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       <Tabs defaultValue="analysis" className="flex-1 flex flex-col min-h-0">
         <TabsList className="mx-4 mt-4 h-8 bg-muted/30">
           <TabsTrigger value="analysis" className="flex-1 text-[9px] font-bold uppercase">Report</TabsTrigger>
+          <TabsTrigger value="history" className="flex-1 text-[9px] font-bold uppercase gap-1.5">
+            <HistoryIcon className="w-3 h-3" /> Replays
+          </TabsTrigger>
           <TabsTrigger value="tools" className="flex-1 text-[9px] font-bold uppercase">Tools</TabsTrigger>
           <TabsTrigger value="calendar" className="flex-1 text-[9px] font-bold uppercase">Events</TabsTrigger>
-          <TabsTrigger value="history" className="flex-1 text-[9px] font-bold uppercase">Session</TabsTrigger>
         </TabsList>
 
         <ScrollArea className="flex-1">
@@ -166,6 +171,31 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             )}
           </TabsContent>
 
+          <TabsContent value="history" className="p-4 space-y-4 m-0">
+            <div className="flex items-center gap-2 mb-2">
+              <HistoryIcon className="w-4 h-4 text-primary" />
+              <h3 className="text-[10px] font-bold uppercase tracking-widest">Analysis History</h3>
+            </div>
+            {history.length > 0 ? history.map((hist, idx) => (
+              <div key={idx} className="p-3 rounded-lg border bg-muted/10 hover:border-primary/50 cursor-pointer transition-all group relative overflow-hidden" onClick={() => onSelectFromHistory?.(hist)}>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-tight">{hist.pair} • {hist.timeframe}</span>
+                  <Badge variant="outline" className={cn("text-[8px] h-4 px-1", hist.direction === 'Bullish' ? "border-green-500 text-green-500" : "border-red-500 text-red-500")}>{hist.direction}</Badge>
+                </div>
+                <p className="text-[9px] text-muted-foreground line-clamp-2 italic">"{hist.reasoning}"</p>
+                <div className="mt-2 flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-[8px] text-muted-foreground uppercase font-bold"><Clock className="w-2.5 h-2.5" /> {new Date(hist.timestamp).toLocaleTimeString()}</div>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Play className="w-3 h-3 text-primary fill-primary" />
+                  </Button>
+                </div>
+                <div className="absolute right-0 top-0 bottom-0 w-1 bg-primary transform translate-x-full group-hover:translate-x-0 transition-transform" />
+              </div>
+            )) : (
+              <p className="text-[10px] text-muted-foreground italic text-center py-20 uppercase tracking-widest">Session is currently empty</p>
+            )}
+          </TabsContent>
+
           <TabsContent value="tools" className="p-4 space-y-6 m-0">
             <div className="p-4 rounded-xl border bg-muted/5 space-y-4">
               <div className="flex items-center gap-2">
@@ -220,24 +250,6 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
               </div>
             )) : (
               <p className="text-[10px] text-muted-foreground italic text-center py-20 uppercase tracking-widest">No major high-impact events</p>
-            )}
-          </TabsContent>
-
-          <TabsContent value="history" className="p-4 space-y-4 m-0">
-            {history.length > 0 ? history.map((hist, idx) => (
-              <div key={idx} className="p-3 rounded-lg border bg-muted/10 hover:border-primary/50 cursor-pointer transition-all group" onClick={() => onSelectFromHistory?.(hist)}>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] font-bold uppercase tracking-tight">{hist.pair} • {hist.timeframe}</span>
-                  <Badge variant="outline" className={cn("text-[8px] h-4 px-1", hist.direction === 'Bullish' ? "border-green-500 text-green-500" : "border-red-500 text-red-500")}>{hist.direction}</Badge>
-                </div>
-                <p className="text-[9px] text-muted-foreground line-clamp-2 italic">"{hist.reasoning}"</p>
-                <div className="mt-2 flex items-center justify-between">
-                  <div className="flex items-center gap-1 text-[8px] text-muted-foreground uppercase font-bold"><Clock className="w-2.5 h-2.5" /> {new Date(hist.timestamp).toLocaleTimeString()}</div>
-                  <ChevronRight className="w-3 h-3 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </div>
-            )) : (
-              <p className="text-[10px] text-muted-foreground italic text-center py-20 uppercase tracking-widest">Session is currently empty</p>
             )}
           </TabsContent>
         </ScrollArea>
