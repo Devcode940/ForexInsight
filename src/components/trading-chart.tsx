@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react';
@@ -62,6 +63,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     }
   }));
 
+  // Initialize Chart
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -117,12 +119,35 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
       resizeObserver.disconnect();
       chart.unsubscribeClick(handleChartClick);
       chart.remove();
+      // Nullify all refs on cleanup to prevent stale references causing crashes in other effects
+      chartRef.current = null;
+      mainSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+      smaSeriesRef.current = null;
+      emaSeriesRef.current = null;
+      rsiSeriesRef.current = null;
+      macdSeriesRef.current = null;
+      macdSignalSeriesRef.current = null;
+      macdHistogramSeriesRef.current = null;
+      entryLineRef.current = null;
+      slLineRef.current = null;
+      tpLineRef.current = null;
     };
   }, [symbol, timeframe, drawMode]);
 
+  // Handle Main Series (Candle/Line toggle)
   useEffect(() => {
     if (!chartRef.current) return;
-    if (mainSeriesRef.current) chartRef.current.removeSeries(mainSeriesRef.current);
+    
+    // Safety: only remove if it's assigned and we didn't just nullify it in chart init cleanup
+    if (mainSeriesRef.current) {
+      try {
+        chartRef.current.removeSeries(mainSeriesRef.current);
+      } catch (e) {
+        // Silently fail if series doesn't belong to current chart instance
+      }
+      mainSeriesRef.current = null;
+    }
 
     if (indicators.chartType === 'line') {
       mainSeriesRef.current = chartRef.current.addLineSeries({ color: '#4CC9F0', lineWidth: 2, title: symbol });
@@ -133,10 +158,11 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     }
   }, [indicators.chartType, symbol]);
 
+  // Update Data and Markers
   useEffect(() => {
     if (mainSeriesRef.current && data.length > 0) {
       if (indicators.chartType === 'line') {
-        mainSeriesRef.current.setData(data.map(d => ({ time: d.time as Time, value: d.close })));
+        (mainSeriesRef.current as ISeriesApi<'Line'>).setData(data.map(d => ({ time: d.time as Time, value: d.close })));
       } else {
         (mainSeriesRef.current as ISeriesApi<'Candlestick'>).setData(data as CandlestickData<Time>[]);
       }
@@ -153,61 +179,80 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     }
   }, [data, indicators.showPatternLabels, indicators.chartType]);
 
-  // Centralized Indicators Implementation
+  // Handle Indicators
   useEffect(() => {
     if (!chartRef.current || data.length === 0) return;
     
+    const chart = chartRef.current;
+
     // SMA
     if (indicators.sma.enabled) {
-      if (!smaSeriesRef.current) smaSeriesRef.current = chartRef.current.addLineSeries({ color: indicators.sma.color, lineWidth: 2, title: `SMA ${indicators.sma.period}` });
+      if (!smaSeriesRef.current) smaSeriesRef.current = chart.addLineSeries({ color: indicators.sma.color, lineWidth: 2, title: `SMA ${indicators.sma.period}` });
       smaSeriesRef.current.setData(calculateSMA(data, indicators.sma.period) as any);
-    } else if (smaSeriesRef.current) { chartRef.current.removeSeries(smaSeriesRef.current); smaSeriesRef.current = null; }
+    } else if (smaSeriesRef.current) { 
+      try { chart.removeSeries(smaSeriesRef.current); } catch(e) {}
+      smaSeriesRef.current = null; 
+    }
 
     // EMA
     if (indicators.ema.enabled) {
-      if (!emaSeriesRef.current) emaSeriesRef.current = chartRef.current.addLineSeries({ color: indicators.ema.color, lineWidth: 2, lineStyle: 2, title: `EMA ${indicators.ema.period}` });
+      if (!emaSeriesRef.current) emaSeriesRef.current = chart.addLineSeries({ color: indicators.ema.color, lineWidth: 2, lineStyle: 2, title: `EMA ${indicators.ema.period}` });
       emaSeriesRef.current.setData(calculateEMA(data, indicators.ema.period) as any);
-    } else if (emaSeriesRef.current) { chartRef.current.removeSeries(emaSeriesRef.current); emaSeriesRef.current = null; }
+    } else if (emaSeriesRef.current) { 
+      try { chart.removeSeries(emaSeriesRef.current); } catch(e) {}
+      emaSeriesRef.current = null; 
+    }
 
     // RSI
     if (indicators.rsi.enabled) {
       if (!rsiSeriesRef.current) {
-        rsiSeriesRef.current = chartRef.current.addLineSeries({ color: indicators.rsi.color, lineWidth: 2, title: 'RSI', priceScaleId: 'rsi' });
-        chartRef.current.priceScale('rsi').applyOptions({ scaleMargins: { top: 0.8, bottom: 0.05 } });
+        rsiSeriesRef.current = chart.addLineSeries({ color: indicators.rsi.color, lineWidth: 2, title: 'RSI', priceScaleId: 'rsi' });
+        chart.priceScale('rsi').applyOptions({ scaleMargins: { top: 0.8, bottom: 0.05 } });
       }
       rsiSeriesRef.current.setData(calculateRSI(data, indicators.rsi.period) as any);
-    } else if (rsiSeriesRef.current) { chartRef.current.removeSeries(rsiSeriesRef.current); rsiSeriesRef.current = null; }
+    } else if (rsiSeriesRef.current) { 
+      try { chart.removeSeries(rsiSeriesRef.current); } catch(e) {}
+      rsiSeriesRef.current = null; 
+    }
 
     // MACD
     if (indicators.macd.enabled) {
       const macd = calculateMACD(data);
       if (!macdSeriesRef.current) {
-        macdSeriesRef.current = chartRef.current.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'MACD', priceScaleId: 'macd' });
-        macdSignalSeriesRef.current = chartRef.current.addLineSeries({ color: '#FF5252', lineWidth: 1, title: 'Signal', priceScaleId: 'macd' });
-        macdHistogramSeriesRef.current = chartRef.current.addHistogramSeries({ priceScaleId: 'macd' });
-        chartRef.current.priceScale('macd').applyOptions({ scaleMargins: { top: 0.85, bottom: 0.05 } });
+        macdSeriesRef.current = chart.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'MACD', priceScaleId: 'macd' });
+        macdSignalSeriesRef.current = chart.addLineSeries({ color: '#FF5252', lineWidth: 1, title: 'Signal', priceScaleId: 'macd' });
+        macdHistogramSeriesRef.current = chart.addHistogramSeries({ priceScaleId: 'macd' });
+        chart.priceScale('macd').applyOptions({ scaleMargins: { top: 0.85, bottom: 0.05 } });
       }
       macdSeriesRef.current.setData(macd.line as any);
       macdSignalSeriesRef.current.setData(macd.signal as any);
       macdHistogramSeriesRef.current.setData(macd.histogram.map(h => ({ ...h, color: h.value >= 0 ? 'rgba(38, 166, 154, 0.4)' : 'rgba(239, 83, 80, 0.4)' })) as any);
     } else if (macdSeriesRef.current) {
-      chartRef.current.removeSeries(macdSeriesRef.current); chartRef.current.removeSeries(macdSignalSeriesRef.current!); chartRef.current.removeSeries(macdHistogramSeriesRef.current!);
+      try {
+        chart.removeSeries(macdSeriesRef.current); 
+        chart.removeSeries(macdSignalSeriesRef.current!); 
+        chart.removeSeries(macdHistogramSeriesRef.current!);
+      } catch(e) {}
       macdSeriesRef.current = null;
+      macdSignalSeriesRef.current = null;
+      macdHistogramSeriesRef.current = null;
     }
   }, [indicators, data]);
 
   // AI Visual Levels
   useEffect(() => {
     if (!mainSeriesRef.current) return;
-    if (entryLineRef.current) mainSeriesRef.current.removePriceLine(entryLineRef.current);
-    if (slLineRef.current) mainSeriesRef.current.removePriceLine(slLineRef.current);
-    if (tpLineRef.current) mainSeriesRef.current.removePriceLine(tpLineRef.current);
+    const series = mainSeriesRef.current;
+
+    if (entryLineRef.current) series.removePriceLine(entryLineRef.current);
+    if (slLineRef.current) series.removePriceLine(slLineRef.current);
+    if (tpLineRef.current) series.removePriceLine(tpLineRef.current);
 
     if (signal && data.length > 0) {
       const entryPrice = parseFloat(signal.entryZone?.split('-')[0]) || data[data.length-1].close;
-      entryLineRef.current = mainSeriesRef.current.createPriceLine({ price: entryPrice, color: '#4CC9F0', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'AI Entry' });
-      slLineRef.current = mainSeriesRef.current.createPriceLine({ price: signal.stopLoss, color: '#FF4D4D', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'AI SL' });
-      tpLineRef.current = mainSeriesRef.current.createPriceLine({ price: signal.takeProfit, color: '#4ADE80', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'AI TP' });
+      entryLineRef.current = series.createPriceLine({ price: entryPrice, color: '#4CC9F0', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'AI Entry' });
+      slLineRef.current = series.createPriceLine({ price: signal.stopLoss, color: '#FF4D4D', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'AI SL' });
+      tpLineRef.current = series.createPriceLine({ price: signal.takeProfit, color: '#4ADE80', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'AI TP' });
     }
   }, [signal, data]);
 
@@ -224,8 +269,6 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
           variant="ghost" size="icon" className="h-8 w-8 text-destructive"
           onClick={() => {
             if (!chartRef.current || !mainSeriesRef.current) return;
-            // Note: lightweight-charts doesn't have clearAllPriceLines, so we'd need to track refs. 
-            // For now, simple visual UI reset.
             window.location.reload(); 
           }}
         >
