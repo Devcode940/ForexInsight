@@ -791,6 +791,7 @@ export default function DashboardPage() {
           calendar={calendar}
           isLoading={isAnalyzing}
           isGeneratingAudio={isGeneratingAudio}
+          userId={user?.id}
           onSelectFromHistory={(sig) => {
             setSignal(sig);
             setActivePair(sig.pair);

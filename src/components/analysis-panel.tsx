@@ -28,6 +28,8 @@ import { calculatePositionSize } from '@/lib/forex-data-utils';
 import { IndicatorsState } from '@/components/indicator-settings-sidebar';
 import { ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 import { useToast } from '@/hooks/use-toast';
+import { saveUserApiKeys } from '@/app/actions/user-settings';
+import { STORAGE_KEYS } from '@/lib/constants';
 
 // --- Types ---
 type TradeDirection = 'Bullish' | 'Bearish' | 'Neutral';
@@ -108,8 +110,8 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   // --- Load keys from localStorage (transitional; will move to server) ---
   useEffect(() => {
     try {
-      setFinnhubKey(localStorage.getItem('finnhub_api_key') || '');
-      setAvKey(localStorage.getItem('alphavantage_api_key') || '');
+      setFinnhubKey(localStorage.getItem(STORAGE_KEYS.FINNHUB_KEY) || '');
+      setAvKey(localStorage.getItem(STORAGE_KEYS.ALPHAVANTAGE_KEY) || '');
     } catch (e) {
       console.warn('[AnalysisPanel] localStorage unavailable', e);
     }
@@ -160,14 +162,53 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
   };
 
-  const saveKeys = () => {
+  const saveKeys = async () => {
+    // If user is authenticated, save securely to server
+    if (userId) {
+      try {
+        const result = await saveUserApiKeys(userId, {
+          finnhubApiKey: finnhubKey || undefined,
+          alphavantageApiKey: avKey || undefined,
+        });
+
+        if (result.success) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.MARKET_PROVIDER, marketProvider);
+          } catch (e) {
+            // Non-critical
+          }
+          toast({
+            title: 'Saved securely',
+            description: result.message,
+            variant: 'default',
+          });
+          window.location.reload();
+        } else {
+          toast({
+            title: 'Save failed',
+            description: result.message,
+            variant: 'destructive',
+          });
+        }
+        return;
+      } catch (e) {
+        toast({
+          title: 'Save failed',
+          description: e instanceof Error ? e.message : 'Unknown error',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    // Fallback: unauthenticated — localStorage only (with warning)
     try {
-      if (finnhubKey) localStorage.setItem('finnhub_api_key', finnhubKey);
-      if (avKey) localStorage.setItem('alphavantage_api_key', avKey);
-      localStorage.setItem('market_provider', marketProvider);
+      if (finnhubKey) localStorage.setItem(STORAGE_KEYS.FINNHUB_KEY, finnhubKey);
+      if (avKey) localStorage.setItem(STORAGE_KEYS.ALPHAVANTAGE_KEY, avKey);
+      localStorage.setItem(STORAGE_KEYS.MARKET_PROVIDER, marketProvider);
       toast({
-        title: 'Settings saved',
-        description: 'Note: keys are stored locally in this browser only.',
+        title: 'Saved locally',
+        description: 'Sign in for secure server-side key storage.',
         variant: 'default',
       });
       window.location.reload();

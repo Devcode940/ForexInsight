@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import { ai } from '@/ai/genkit';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { sanitizeCustomInstructions } from '@/lib/input-sanitization';
+
+// --- Rate limit config ---
+const AI_RATE_LIMIT_MAX = 10; // 10 analyses
+const AI_RATE_LIMIT_WINDOW_MS = 60_000; // per minute per user/session
 
 // --- Zod Schemas ---
 const CandleDataSchema = z.object({
@@ -105,7 +111,50 @@ const explainableTradeSignalsFlow = ai.defineFlow(
     outputSchema: ExplainableTradeSignalsOutputSchema,
   },
   async (input) => {
-    const result = await tradeSignalsPrompt(input);
+    // 1. Rate limit — keyed by currency pair + a coarse session identifier
+    // In a real auth setup, this would be keyed by user ID
+    const rlKey = `ai-analysis:${input.currencyPair}`;
+    const rl = checkRateLimit({
+      key: rlKey,
+      max: AI_RATE_LIMIT_MAX,
+      windowMs: AI_RATE_LIMIT_WINDOW_MS,
+    });
+
+    if (!rl.allowed) {
+      const retrySec = Math.ceil((rl.resetAt - Date.now()) / 1000);
+      throw new Error(`AI analysis rate limit exceeded. Try again in ${retrySec}s.`);
+    }
+
+    // 2. Sanitize custom instructions (defense against prompt injection)
+    let sanitizedInput = input;
+    if (input.customInstructions) {
+      const { clean, warnings, truncated } = sanitizeCustomInstructions(input.customInstructions);
+      if (warnings.length > 0) {
+        console.warn('[TradeSignals] Custom instructions sanitized:', warnings.join('; '));
+      }
+      sanitizedInput = {
+        ...input,
+        customInstructions: clean || undefined,
+      };
+      if (truncated) {
+        sanitizedInput = {
+          ...sanitizedInput,
+          customInstructions: clean
+            ? `${clean} [NOTE: User input truncated for safety]`
+            : undefined,
+        };
+      }
+    }
+
+    // 3. Cap candle count to prevent token exhaustion
+    const MAX_CANDLES = 100;
+    const candles = sanitizedInput.candles.length > MAX_CANDLES
+      ? sanitizedInput.candles.slice(-MAX_CANDLES)
+      : sanitizedInput.candles;
+
+    const finalInput = { ...sanitizedInput, candles };
+
+    const result = await tradeSignalsPrompt(finalInput);
 
     // Validate output — LLM can hallucinate; ensure we have safe defaults
     if (!result.output) {
