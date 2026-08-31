@@ -4,11 +4,12 @@ import yahooFinance from 'yahoo-finance2';
 import { z } from 'zod';
 import { Candlestick } from '@/lib/forex-data-utils';
 import { supabase } from '@/lib/supabase/config';
+import { MARKET_DATA } from '@/lib/constants';
 
 // --- Constants ---
-const DEFAULT_LOOKBACK_DAYS = 7;
-const REQUEST_TIMEOUT_MS = 10_000;
-const MAX_CANDLES = 1000;
+const DEFAULT_LOOKBACK_DAYS = MARKET_DATA.LOOKBACK_DAYS;
+const REQUEST_TIMEOUT_MS = MARKET_DATA.REQUEST_TIMEOUT_MS;
+const MAX_CANDLES = MARKET_DATA.MAX_CANDLES_PER_FETCH;
 
 // --- Input Validation Schemas ---
 const SymbolSchema = z.string().min(3).max(12).regex(/^[A-Z0-9=X_F]+$/);

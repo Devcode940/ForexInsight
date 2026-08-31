@@ -55,18 +55,26 @@ import {
   saveTradeSignal,
   getSignalHistory,
 } from '@/lib/supabase/store';
+import {
+  MARKET_DATA,
+  AI_ANALYSIS,
+  WEBSOCKET,
+  UI,
+  STORAGE_KEYS,
+  INDICATORS,
+} from '@/lib/constants';
+import { isFeatureEnabled } from '@/lib/feature-flags';
 
 // --- Constants ---
-const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1H', 'D'] as const;
-const POLLING_INTERVAL_MS = 15_000;
-const MAX_HISTORY_ITEMS = 20;
-const ANALYSIS_COOLDOWN_MS = 5_000;
-const WEBSOCKET_RECONNECT_DELAY_MS = 3_000;
-const MAX_CANDLES_MEMORY = 500;
+const POLLING_INTERVAL_MS = MARKET_DATA.POLLING_INTERVAL_MS;
+const MAX_HISTORY_ITEMS = AI_ANALYSIS.MAX_HISTORY_ITEMS;
+const ANALYSIS_COOLDOWN_MS = AI_ANALYSIS.COOLDOWN_MS;
+const WEBSOCKET_RECONNECT_DELAY_MS = WEBSOCKET.INITIAL_RECONNECT_DELAY_MS;
+const MAX_CANDLES_MEMORY = MARKET_DATA.MAX_CANDLES_MEMORY;
 
 // --- Types ---
 type MarketProvider = 'yahoo' | 'finnhub' | 'alphavantage';
-type Timeframe = typeof TIMEFRAMES[number];
+type Timeframe = (typeof UI.TIMEFRAMES)[number];
 
 interface TradeSignal extends ExplainableTradeSignalsOutput {
   timestamp: number;
@@ -107,8 +115,8 @@ export default function DashboardPage() {
   const [isMounted, setIsMounted] = useState(false);
 
   // Market state
-  const [activePair, setActivePair] = useState<string>('EURUSD');
-  const [activeTimeframe, setActiveTimeframe] = useState<Timeframe>('1H');
+  const [activePair, setActivePair] = useState<string>(UI.DEFAULT_PAIR);
+  const [activeTimeframe, setActiveTimeframe] = useState<Timeframe>(UI.DEFAULT_TIMEFRAME);
   const [marketProvider, setMarketProvider] = useState<MarketProvider>('yahoo');
   const [customAiInstructions, setCustomAiInstructions] = useState<string>('');
   const [data, setData] = useState<Candlestick[]>([]);
@@ -124,10 +132,10 @@ export default function DashboardPage() {
 
   // Indicator configuration
   const [indicators, setIndicators] = useState<IndicatorsState>({
-    sma: { enabled: true, period: 20, color: '#3A86FF' },
-    ema: { enabled: false, period: 50, color: '#FFBE0B' },
-    rsi: { enabled: true, period: 14, color: '#9D4EDD' },
-    macd: { enabled: false, fast: 12, slow: 26, signal: 9 },
+    sma: { enabled: true, period: INDICATORS.SMA.period, color: INDICATORS.SMA.color },
+    ema: { enabled: false, period: INDICATORS.EMA.period, color: INDICATORS.EMA.color },
+    rsi: { enabled: true, period: INDICATORS.RSI.period, color: INDICATORS.RSI.color },
+    macd: { enabled: false, fast: INDICATORS.MACD.fast, slow: INDICATORS.MACD.slow, signal: INDICATORS.MACD.signal },
     volume: { enabled: true },
     showPatternLabels: true,
     chartType: 'candlestick',
@@ -160,13 +168,13 @@ export default function DashboardPage() {
 
     // Load from localStorage first (fast, for unauthenticated users)
     try {
-      const savedHistory = localStorage.getItem('fx_session_history');
+      const savedHistory = localStorage.getItem(STORAGE_KEYS.SESSION_HISTORY);
       if (savedHistory) {
         const parsed = JSON.parse(savedHistory) as TradeSignal[];
         if (Array.isArray(parsed)) setSignalHistory(parsed);
       }
 
-      const savedProvider = localStorage.getItem('market_provider');
+      const savedProvider = localStorage.getItem(STORAGE_KEYS.MARKET_PROVIDER);
       if (savedProvider === 'yahoo' || savedProvider === 'finnhub' || savedProvider === 'alphavantage') {
         setMarketProvider(savedProvider);
       }
@@ -267,7 +275,7 @@ export default function DashboardPage() {
         setData(result);
         setIsRealData(true);
       } else {
-        setData(generateMockForexData(getMockBasePrice(activePair), 150));
+        setData(generateMockForexData(getMockBasePrice(activePair), MARKET_DATA.MOCK_CANDLE_COUNT));
         setIsRealData(false);
         if (marketProvider !== 'yahoo') {
           toast({
@@ -295,7 +303,7 @@ export default function DashboardPage() {
 
   // --- WebSocket for Finnhub real-time ---
   useEffect(() => {
-    if (marketProvider !== 'finnhub') {
+    if (marketProvider !== 'finnhub' || !isFeatureEnabled('WEBSOCKET_ENABLED')) {
       if (socketRef.current) {
         try {
           if (socketRef.current.readyState === WebSocket.OPEN) {
@@ -368,7 +376,7 @@ export default function DashboardPage() {
             reconnectAttemptsRef.current++;
             const delay = Math.min(
               WEBSOCKET_RECONNECT_DELAY_MS * Math.pow(2, reconnectAttemptsRef.current - 1),
-              30_000
+              WEBSOCKET.MAX_RECONNECT_DELAY_MS
             );
             setTimeout(connect, delay);
           };
@@ -428,6 +436,16 @@ export default function DashboardPage() {
 
   // --- Run AI Analysis ---
   const runAnalysis = useCallback(async () => {
+    // Feature flag check
+    if (!isFeatureEnabled('AI_ANALYSIS_ENABLED')) {
+      toast({
+        title: 'Feature disabled',
+        description: 'AI analysis is currently unavailable.',
+        variant: 'default',
+      });
+      return;
+    }
+
     // Cooldown to prevent spamming
     const now = Date.now();
     if (now - lastAnalysisRef.current < ANALYSIS_COOLDOWN_MS) {
@@ -441,8 +459,8 @@ export default function DashboardPage() {
     lastAnalysisRef.current = now;
 
     let recentCandles = chartRef.current?.getVisibleData() || [];
-    if (recentCandles.length < 10) recentCandles = data.slice(-100);
-    if (recentCandles.length < 10) {
+    if (recentCandles.length < AI_ANALYSIS.MIN_CANDLES_REQUIRED) recentCandles = data.slice(-100);
+    if (recentCandles.length < AI_ANALYSIS.MIN_CANDLES_REQUIRED) {
       toast({
         title: 'Insufficient data',
         description: 'Not enough candle data to run analysis.',
@@ -500,7 +518,7 @@ export default function DashboardPage() {
       const result = await getExplainableTradeSignals({
         currencyPair: activePair,
         timeframe: activeTimeframe,
-        candles: recentCandles.slice(-100).map((c) => ({
+        candles: recentCandles.slice(-AI_ANALYSIS.MAX_CANDLES_FOR_LLM).map((c) => ({
           open: c.open,
           high: c.high,
           low: c.low,
@@ -536,7 +554,7 @@ export default function DashboardPage() {
       setSignalHistory(updatedHistory);
 
       try {
-        localStorage.setItem('fx_session_history', JSON.stringify(updatedHistory));
+        localStorage.setItem(STORAGE_KEYS.SESSION_HISTORY, JSON.stringify(updatedHistory));
       } catch (e) {
         logError('localStorageSave', e);
       }
@@ -583,6 +601,28 @@ export default function DashboardPage() {
     toast,
   ]);
 
+  // --- Graceful shutdown: clean up resources on page unload ---
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Close WebSocket
+      if (socketRef.current) {
+        try {
+          if (socketRef.current.readyState === WebSocket.OPEN) {
+            const symbol = mapSymbolToFinnhub(activePair);
+            socketRef.current.send(JSON.stringify({ type: 'unsubscribe', symbol }));
+          }
+          socketRef.current.close();
+        } catch (e) {
+          // Best-effort cleanup during unload — ignore errors
+        }
+        socketRef.current = null;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [activePair]);
+
   // --- Render ---
   if (!isMounted) return null;
 
@@ -620,7 +660,7 @@ export default function DashboardPage() {
             </div>
             <Tabs value={activeTimeframe} onValueChange={(v) => setActiveTimeframe(v as Timeframe)}>
               <TabsList className="bg-transparent h-8 gap-1 hidden sm:flex">
-                {TIMEFRAMES.map((tf) => (
+                {UI.TIMEFRAMES.map((tf) => (
                   <TabsTrigger
                     key={tf}
                     value={tf}
@@ -634,16 +674,18 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            <Button
-              onClick={runAnalysis}
-              disabled={isAnalyzing}
-              className="h-8 text-[10px] font-bold uppercase bg-primary hover:bg-primary/90"
-            >
-              <Zap
-                className={cn('w-3.5 h-3.5 mr-1.5', isAnalyzing && 'animate-pulse')}
-              />
-              {isAnalyzing ? 'Analyzing' : 'AI Multi-TF Analysis'}
-            </Button>
+            {isFeatureEnabled('AI_ANALYSIS_ENABLED') && (
+              <Button
+                onClick={runAnalysis}
+                disabled={isAnalyzing}
+                className="h-8 text-[10px] font-bold uppercase bg-primary hover:bg-primary/90"
+              >
+                <Zap
+                  className={cn('w-3.5 h-3.5 mr-1.5', isAnalyzing && 'animate-pulse')}
+                />
+                {isAnalyzing ? 'Analyzing' : 'AI Multi-TF Analysis'}
+              </Button>
+            )}
             <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
             <Button
               variant="ghost"
@@ -765,7 +807,7 @@ export default function DashboardPage() {
           setMarketProvider={(val) => {
             setMarketProvider(val);
             try {
-              localStorage.setItem('market_provider', val);
+              localStorage.setItem(STORAGE_KEYS.MARKET_PROVIDER, val);
             } catch (e) {
               logError('localStorageSave', e);
             }

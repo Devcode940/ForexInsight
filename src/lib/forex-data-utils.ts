@@ -1,4 +1,6 @@
 
+import { POSITION_CALC } from '@/lib/constants';
+
 export interface Candlestick {
   time: string | number;
   open: number;
@@ -212,9 +214,11 @@ export function calculatePositionSize(
   stopLossPips: number,
   isJpy: boolean = false
 ) {
-  if (stopLossPips <= 0) return 0;
+  if (stopLossPips <= 0 || balance <= 0 || riskPercent <= 0) return 0;
   const amountToRisk = balance * (riskPercent / 100);
-  const pipValuePerStandardLot = isJpy ? 6.70 : 10.00; 
+  const pipValuePerStandardLot = isJpy
+    ? POSITION_CALC.PIP_VALUE_STANDARD_JPY
+    : POSITION_CALC.PIP_VALUE_STANDARD_USD;
   const lotSize = amountToRisk / (stopLossPips * pipValuePerStandardLot);
   return Number(lotSize.toFixed(2));
 }
