@@ -1,55 +1,60 @@
 'use server';
 
 /**
- * Thin server-action wrappers around the Genkit AI flows.
+ * Server-action wrappers for AI analysis jobs.
  *
- * IMPORTANT: Client components must import from this file, NOT directly
- * from src/ai/flows/*. The Genkit runtime and its Node-only dependencies
- * (grpc-js, etc.) must never reach the client bundle.
+ * Routes jobs through the AI queue layer (@/lib/ai-queue):
+ *   - When Redis is available: jobs go to BullMQ and are processed by the
+ *     standalone AI worker (npm run ai:worker). This keeps slow LLM calls
+ *     out of the Next.js request pool.
+ *   - When Redis is NOT available: falls back to inline execution within
+ *     the Next.js process (local dev default).
+ *
+ * Client components must import from HERE, never from src/ai/flows/*.
+ * The Genkit runtime + grpc-js must never reach the client bundle.
  */
 
 import {
-  getExplainableTradeSignals,
-  type ExplainableTradeSignalsInput,
-  type ExplainableTradeSignalsOutput,
+  enqueueTradeSignalAnalysis,
+  enqueuePatternRecognition,
+  enqueueTTS,
+} from '@/lib/ai-queue';
+import type {
+  ExplainableTradeSignalsInput,
+  ExplainableTradeSignalsOutput,
 } from '@/ai/flows/explainable-trade-signals';
-import {
-  detectCandlestickPatterns,
-  type CandlestickPatternRecognitionInput,
-  type CandlestickPatternRecognitionOutput,
+import type {
+  CandlestickPatternRecognitionInput,
+  CandlestickPatternRecognitionOutput,
 } from '@/ai/flows/candlestick-pattern-recognition';
-import {
-  generateAnalysisAudio,
-  type AnalysisTTSInput,
-  type AnalysisTTSOutput,
+import type {
+  AnalysisTTSInput,
+  AnalysisTTSOutput,
 } from '@/ai/flows/analysis-tts';
 
 /**
  * Generate an explainable trade signal from market data and indicators.
- * Server-only — calls Genkit + Gemini.
  */
 export async function runTradeSignalAnalysis(
   input: ExplainableTradeSignalsInput
 ): Promise<ExplainableTradeSignalsOutput> {
-  return getExplainableTradeSignals(input);
+  return enqueueTradeSignalAnalysis(input);
 }
 
 /**
  * Detect candlestick patterns using AI.
- * Server-only — calls Genkit + Gemini.
  */
 export async function runPatternRecognition(
   input: CandlestickPatternRecognitionInput
 ): Promise<CandlestickPatternRecognitionOutput> {
-  return detectCandlestickPatterns(input);
+  return enqueuePatternRecognition(input);
 }
 
 /**
  * Convert analysis text to speech audio.
- * Server-only — calls Gemini TTS model.
  */
 export async function runAnalysisTTS(
   input: AnalysisTTSInput
 ): Promise<AnalysisTTSOutput> {
-  return generateAnalysisAudio(input);
+  return enqueueTTS(input);
 }

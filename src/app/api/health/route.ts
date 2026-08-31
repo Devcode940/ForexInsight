@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/config';
 import { HEALTH } from '@/lib/constants';
+import { isRedisAvailable } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -13,6 +14,10 @@ interface HealthStatus {
   checks: {
     supabase: 'ok' | 'error' | 'skipped';
     supabaseLatencyMs?: number;
+    redis: 'ok' | 'error' | 'skipped' | 'unconfigured';
+  };
+  aiQueue: {
+    mode: 'queue' | 'inline-fallback';
   };
 }
 
@@ -32,7 +37,6 @@ async function checkSupabase(): Promise<{
   const timeoutId = setTimeout(() => controller.abort(), HEALTH.SUPABASE_PING_TIMEOUT_MS);
 
   try {
-    // Simple lightweight query — just check if we can reach the DB
     const { error } = await supabase.from('user_preferences').select('user_id').limit(1);
     clearTimeout(timeoutId);
     const latency = Math.round(performance.now() - start);
@@ -50,11 +54,29 @@ async function checkSupabase(): Promise<{
   }
 }
 
-export async function GET() {
-  const supabaseCheck = await checkSupabase();
+async function checkRedis(): Promise<'ok' | 'error' | 'skipped' | 'unconfigured'> {
+  try {
+    const available = await isRedisAvailable();
+    return available ? 'ok' : 'unconfigured';
+  } catch (e) {
+    console.error('[Health] Redis check failed:', e instanceof Error ? e.message : String(e));
+    return 'error';
+  }
+}
 
-  const overallStatus: HealthStatus['status'] =
-    supabaseCheck.status === 'error' ? 'degraded' : 'ok';
+export async function GET() {
+  const [supabaseCheck, redisCheck] = await Promise.all([
+    checkSupabase(),
+    checkRedis(),
+  ]);
+
+  // Overall status: ok only if all non-skipped checks are ok
+  const activeChecks = [supabaseCheck.status].filter((s): s is 'ok' | 'error' => s !== 'skipped');
+  const hasErrors = activeChecks.includes('error');
+  const overallStatus: HealthStatus['status'] = hasErrors ? 'degraded' : 'ok';
+
+  const aiQueueMode: HealthStatus['aiQueue']['mode'] =
+    redisCheck === 'ok' ? 'queue' : 'inline-fallback';
 
   const status: HealthStatus = {
     status: overallStatus,
@@ -64,11 +86,13 @@ export async function GET() {
     checks: {
       supabase: supabaseCheck.status,
       supabaseLatencyMs: supabaseCheck.latencyMs,
+      redis: redisCheck,
+    },
+    aiQueue: {
+      mode: aiQueueMode,
     },
   };
 
-  // Return 503 only when fully down; degraded serves 200 with status info.
-  // The 'error' branch is reserved for future critical-check failures.
   const httpStatus = (overallStatus as HealthStatus['status']) === 'error' ? 503 : 200;
 
   return NextResponse.json(status, {
