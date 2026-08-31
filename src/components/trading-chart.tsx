@@ -107,12 +107,14 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
     volumeSeriesRef.current = volumeSeries;
 
-    const handleChartClick = (param: MouseEventParams) => {
-      if (!mainSeriesRef.current || !param.price) return;
+    const handleChartClick = (param: MouseEventParams<Time>) => {
+      if (!mainSeriesRef.current || !param.point) return;
 
       if (drawMode === 'hline') {
+        const price = mainSeriesRef.current.coordinateToPrice(param.point.y);
+        if (price == null || Number.isNaN(price)) return;
         const line = mainSeriesRef.current.createPriceLine({
-          price: param.price, color: '#3A86FF', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Analysis Level'
+          price, color: '#3A86FF', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Analysis Level'
         });
         manualLinesRef.current.push(line);
         setDrawMode('none');
@@ -215,20 +217,33 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(({
     if (indicators.macd.enabled) {
       const macd = calculateMACD(data);
       if (!macdSeriesRef.current) {
-        macdSeriesRef.current = chart.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'MACD', priceScaleId: 'macd' });
-        macdSignalSeriesRef.current = chart.addLineSeries({ color: '#FF5252', lineWidth: 1, title: 'Signal', priceScaleId: 'macd' });
-        macdHistogramSeriesRef.current = chart.addHistogramSeries({ priceScaleId: 'macd' });
+        const macdLineSeries = chart.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'MACD', priceScaleId: 'macd' });
+        const macdSignalSeries = chart.addLineSeries({ color: '#FF5252', lineWidth: 1, title: 'Signal', priceScaleId: 'macd' });
+        const macdHistSeries = chart.addHistogramSeries({ priceScaleId: 'macd' });
+        macdSeriesRef.current = macdLineSeries;
+        macdSignalSeriesRef.current = macdSignalSeries;
+        macdHistogramSeriesRef.current = macdHistSeries;
         chart.priceScale('macd').applyOptions({ scaleMargins: { top: 0.85, bottom: 0.05 } });
       }
-      macdSeriesRef.current.setData(macd.line as any);
-      macdSignalSeriesRef.current.setData(macd.signal as any);
-      macdHistogramSeriesRef.current.setData(macd.histogram.map(h => ({ ...h, color: h.value >= 0 ? 'rgba(38, 166, 154, 0.4)' : 'rgba(239, 83, 80, 0.4)' })) as any);
+      if (macdSeriesRef.current) macdSeriesRef.current.setData(macd.line as any);
+      if (macdSignalSeriesRef.current) macdSignalSeriesRef.current.setData(macd.signal as any);
+      if (macdHistogramSeriesRef.current) {
+        macdHistogramSeriesRef.current.setData(
+          macd.histogram.map(h => ({
+            time: h.time as Time,
+            value: h.value,
+            color: h.value >= 0 ? 'rgba(38, 166, 154, 0.4)' : 'rgba(239, 83, 80, 0.4)',
+          }))
+        );
+      }
     } else if (macdSeriesRef.current) {
       try {
-        chart.removeSeries(macdSeriesRef.current); 
-        chart.removeSeries(macdSignalSeriesRef.current!); 
-        chart.removeSeries(macdHistogramSeriesRef.current!);
-      } catch(e) {}
+        if (macdSeriesRef.current) chart.removeSeries(macdSeriesRef.current);
+        if (macdSignalSeriesRef.current) chart.removeSeries(macdSignalSeriesRef.current);
+        if (macdHistogramSeriesRef.current) chart.removeSeries(macdHistogramSeriesRef.current);
+      } catch(e) {
+        console.warn('[TradingChart] MACD series cleanup failed:', e);
+      }
       macdSeriesRef.current = null;
     }
   }, [indicators, data]);

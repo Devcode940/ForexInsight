@@ -67,7 +67,9 @@ export async function GET() {
     },
   };
 
-  const httpStatus = overallStatus === 'error' ? 503 : overallStatus === 'degraded' ? 200 : 200;
+  // Return 503 only when fully down; degraded serves 200 with status info.
+  // The 'error' branch is reserved for future critical-check failures.
+  const httpStatus = (overallStatus as HealthStatus['status']) === 'error' ? 503 : 200;
 
   return NextResponse.json(status, {
     status: httpStatus,

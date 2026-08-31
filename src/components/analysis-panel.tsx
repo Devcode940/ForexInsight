@@ -75,7 +75,17 @@ interface AnalysisPanelProps {
 // --- Helpers ---
 type IndicatorKey = keyof IndicatorsState;
 
-function isObjectValue(value: IndicatorsState[IndicatorKey]): value is Record<string, unknown> {
+// Object-shaped indicator configs (exclude primitives like boolean and chartType)
+type IndicatorObjectConfig =
+  | IndicatorsState['sma']
+  | IndicatorsState['ema']
+  | IndicatorsState['rsi']
+  | IndicatorsState['macd']
+  | IndicatorsState['volume'];
+
+function isObjectIndicatorValue(
+  value: IndicatorsState[IndicatorKey]
+): value is IndicatorObjectConfig {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -227,13 +237,20 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   ) => {
     setIndicators((prev) => {
       const current = prev[key];
-      if (isObjectValue(current) && isObjectValue(updates as Record<string, unknown>)) {
-        return {
-          ...prev,
-          [key]: { ...current, ...(updates as Record<string, unknown>) },
-        };
+      if (isObjectIndicatorValue(current)) {
+        // Narrow updates to a partial object shape compatible with current
+        const updatesObj =
+          typeof updates === 'object' && updates !== null && !Array.isArray(updates)
+            ? (updates as Partial<IndicatorObjectConfig>)
+            : null;
+        if (updatesObj) {
+          return {
+            ...prev,
+            [key]: Object.assign({}, current, updatesObj),
+          } as typeof prev;
+        }
       }
-      return { ...prev, [key]: updates as IndicatorsState[K] };
+      return { ...prev, [key]: updates };
     });
   };
 

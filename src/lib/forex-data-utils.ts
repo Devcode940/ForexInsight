@@ -155,17 +155,31 @@ export function calculateRSI(data: Candlestick[], period: number = 14) {
   return rsi;
 }
 
+// Shared type for all indicator output data points
+export interface IndicatorPoint {
+  time: string | number;
+  value: number;
+}
+
 export function calculateMACD(data: Candlestick[], fast = 12, slow = 26, signal = 9) {
   const emaFast = calculateEMA(data, fast);
   const emaSlow = calculateEMA(data, slow);
-  const macdLine = [];
+  const macdLine: IndicatorPoint[] = [];
   for (let i = 0; i < data.length; i++) {
     const f = emaFast.find(e => e.time === data[i].time);
     const s = emaSlow.find(e => e.time === data[i].time);
     if (f && s) macdLine.push({ time: data[i].time, value: Number((f.value - s.value).toFixed(5)) });
   }
-  const signalLine = calculateEMA(macdLine.map(m => ({ ...m, open: m.value, high: m.value, low: m.value, close: m.value })) as any, signal);
-  const histogram = [];
+  // Adapt MACD line into Candlestick-like shape for calculateEMA
+  const macdAsCandles: Candlestick[] = macdLine.map(m => ({
+    time: m.time,
+    open: m.value,
+    high: m.value,
+    low: m.value,
+    close: m.value,
+  }));
+  const signalLine = calculateEMA(macdAsCandles, signal);
+  const histogram: IndicatorPoint[] = [];
   for (let i = 0; i < macdLine.length; i++) {
     const sig = signalLine.find(s => s.time === macdLine[i].time);
     if (sig) histogram.push({ time: macdLine[i].time, value: Number((macdLine[i].value - sig.value).toFixed(5)) });

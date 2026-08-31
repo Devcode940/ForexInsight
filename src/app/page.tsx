@@ -35,10 +35,10 @@ import {
   fetchEconomicCalendar,
 } from '@/lib/forex-data-utils';
 import {
-  getExplainableTradeSignals,
-  ExplainableTradeSignalsOutput,
-} from '@/ai/flows/explainable-trade-signals';
-import { generateAnalysisAudio } from '@/ai/flows/analysis-tts';
+  runTradeSignalAnalysis,
+  runAnalysisTTS,
+} from '@/app/actions/ai-analysis';
+import type { ExplainableTradeSignalsOutput } from '@/ai/flows/explainable-trade-signals';
 import {
   fetchYahooCandles,
   fetchFinnhubCandles,
@@ -515,7 +515,7 @@ export default function DashboardPage() {
             }
           : undefined;
 
-      const result = await getExplainableTradeSignals({
+      const result = await runTradeSignalAnalysis({
         currencyPair: activePair,
         timeframe: activeTimeframe,
         candles: recentCandles.slice(-AI_ANALYSIS.MAX_CANDLES_FOR_LLM).map((c) => ({
@@ -568,7 +568,10 @@ export default function DashboardPage() {
       // Generate audio (non-blocking, update signal when ready)
       setIsGeneratingAudio(true);
       try {
-        const audioResult = await generateAnalysisAudio({ text: result.reasoning });
+        const audioResult = await runAnalysisTTS({
+          text: result.reasoning,
+          voice: 'Algenib',
+        });
         setSignal((prev) =>
           prev ? { ...prev, audioUri: audioResult.audioDataUri } : undefined
         );

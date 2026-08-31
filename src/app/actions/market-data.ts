@@ -1,6 +1,7 @@
 'use server';
 
 import yahooFinance from 'yahoo-finance2';
+import type { ChartOptions, ChartQuote } from 'yahoo-finance2';
 import { z } from 'zod';
 import { Candlestick } from '@/lib/forex-data-utils';
 import { supabase } from '@/lib/supabase/config';
@@ -50,9 +51,9 @@ export async function fetchYahooCandles(
   }
 
   try {
-    const queryOptions = {
+    const queryOptions: ChartOptions = {
       period1: Math.floor(Date.now() / 1000) - DEFAULT_LOOKBACK_DAYS * 24 * 60 * 60,
-      interval: interval as yahooFinance.ChartOptions["interval"],
+      interval: interval as ChartOptions['interval'],
     };
 
     const result = await yahooFinance.chart(symbol, queryOptions);
@@ -62,14 +63,14 @@ export async function fetchYahooCandles(
     }
 
     const candles = result.quotes
-      .filter(q =>
+      .filter((q: ChartQuote) =>
         q.date != null &&
         q.open != null &&
         q.high != null &&
         q.low != null &&
         q.close != null
       )
-      .map((q) => ({
+      .map((q: ChartQuote) => ({
         time: Math.floor(new Date(q.date as Date).getTime() / 1000),
         open: q.open as number,
         high: q.high as number,
@@ -77,7 +78,7 @@ export async function fetchYahooCandles(
         close: q.close as number,
         volume: q.volume ?? 0,
       }))
-      .sort((a, b) => a.time - b.time)
+      .sort((a: Candlestick, b: Candlestick) => Number(a.time) - Number(b.time))
       .slice(-MAX_CANDLES);
 
     return candles.length > 0 ? candles : null;
