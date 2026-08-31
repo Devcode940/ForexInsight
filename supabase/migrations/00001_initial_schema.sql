@@ -1,11 +1,13 @@
 -- User preferences table
 create table if not exists public.user_preferences (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  active_pair text default 'XAUUSD',
+  active_pair text default 'EURUSD',
   active_timeframe text default '1H',
   indicators jsonb default '{}',
   watchlist jsonb default '[]',
   custom_ai_instructions text,
+  finnhub_api_key text,          -- encrypted at rest by Supabase; never logged
+  alphavantage_api_key text,     -- encrypted at rest by Supabase; never logged
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -25,11 +27,12 @@ create table if not exists public.signals (
   timeframe text not null,
   direction text,
   entry_zone text,
-  stop_loss text,
-  take_profit text,
+  stop_loss text,                    -- stored as text for precision; parsed to number on read
+  take_profit text,                  -- stored as text for precision; parsed to number on read
   risk_reward_ratio text,
   confidence integer,
   confluence_factors jsonb default '[]',
+  correlation_analysis text,         -- added: how higher timeframes align
   reasoning text,
   risk_warning text,
   created_at timestamptz default now()
@@ -42,5 +45,7 @@ create policy "Users can manage their own signals"
   for all
   using (auth.uid() = user_id);
 
+-- Indexes for query performance
 create index if not exists idx_signals_user_id on public.signals(user_id);
 create index if not exists idx_signals_created_at on public.signals(created_at desc);
+create index if not exists idx_signals_currency_pair on public.signals(currency_pair);

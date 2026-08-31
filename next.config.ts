@@ -1,14 +1,10 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
   serverExternalPackages: ['yahoo-finance2'],
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // TypeScript and ESLint are now enforced — fix errors, don't silence them
+  // typescript: { ignoreBuildErrors: true },  // REMOVED
+  // eslint: { ignoreDuringBuilds: true },     // REMOVED
   images: {
     remotePatterns: [
       {
@@ -29,7 +25,27 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      // Allow Supabase auth avatars
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+        port: '',
+        pathname: '/**',
+      },
     ],
+  },
+  // Production security headers
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        ],
+      },
+    ];
   },
 };
 
