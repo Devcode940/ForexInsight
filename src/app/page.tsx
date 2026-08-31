@@ -48,6 +48,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
+import { supabase } from '@/lib/supabase/config';
 import {
   getUserPreferences,
   saveUserPreferences,
@@ -125,7 +126,6 @@ export default function DashboardPage() {
   const [indicators, setIndicators] = useState<IndicatorsState>({
     sma: { enabled: true, period: 20, color: '#3A86FF' },
     ema: { enabled: false, period: 50, color: '#FFBE0B' },
-    bb: { enabled: false, period: 20, color: '#00F5D4' },
     rsi: { enabled: true, period: 14, color: '#9D4EDD' },
     macd: { enabled: false, fast: 12, slow: 26, signal: 9 },
     volume: { enabled: true },
